@@ -1,0 +1,406 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #f8faf8;
+    color: #0f172a;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  html.dark body {
+    background-color: #0b1120 !important;
+    color: #f8fafc !important;
+  }
+}
+
+/* ===================================================
+   DARK MODE COMPREHENSIVE CONTRAST & VISIBILITY RULES
+   =================================================== */
+html.dark nav,
+html.dark header {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+/* All cards, panels, and white backgrounds MUST turn dark slate in dark mode */
+html.dark [class*="bg-white"],
+html.dark .bg-white,
+html.dark .spotlight-card,
+html.dark [class*="spotlight-card"],
+html.dark .glow-border-card,
+html.dark [class*="glow-border-card"],
+html.dark [class*="bg-[#F8FAF8]"],
+html.dark [class*="bg-[#FAF9F6]"],
+html.dark [class*="bg-[#FFFDF9]"],
+html.dark [class*="bg-[#f8faf9]"],
+html.dark [class*="bg-[#F6FAF6]"] {
+  background-color: #111827 !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+html.dark [class*="bg-slate-50"],
+html.dark [class*="bg-slate-100"] {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+/* Credential & special accent boxes in dark mode */
+html.dark [class*="bg-purple-50"] {
+  background-color: rgba(59, 7, 100, 0.45) !important;
+  border-color: #6b21a8 !important;
+  color: #e9d5ff !important;
+}
+
+html.dark [class*="bg-amber-50"] {
+  background-color: rgba(69, 26, 3, 0.45) !important;
+  border-color: #78350f !important;
+  color: #fde68a !important;
+}
+
+html.dark [class*="bg-emerald-50"] {
+  background-color: rgba(2, 44, 34, 0.45) !important;
+  border-color: #065f46 !important;
+  color: #a7f3d0 !important;
+}
+
+html.dark [class*="bg-orange-50"] {
+  background-color: rgba(67, 20, 7, 0.45) !important;
+  border-color: #7c2d12 !important;
+  color: #fed7aa !important;
+}
+
+/* Retain white background for QR code SVG containers so phone cameras can scan them */
+html.dark .qr-code-box,
+html.dark [data-qr-code] {
+  background-color: #ffffff !important;
+}
+
+/* High-Contrast Luminous Text Rules for Dark Mode */
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6,
+html.dark strong,
+html.dark b {
+  color: #ffffff !important;
+}
+
+html.dark p,
+html.dark label,
+html.dark li {
+  color: #e2e8f0;
+}
+
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-black {
+  color: #ffffff !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-gray-700,
+html.dark .text-gray-600 {
+  color: #e2e8f0 !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400,
+html.dark .text-gray-500,
+html.dark .text-gray-400 {
+  color: #94a3b8 !important;
+}
+
+/* Transform originally dark accent texts into luminous vibrant colors on dark backgrounds */
+html.dark [class*="text-orange-950"],
+html.dark [class*="text-orange-900"],
+html.dark [class*="text-orange-800"],
+html.dark [class*="text-orange-700"] {
+  color: #fb923c !important; /* Bright crisp orange */
+}
+
+html.dark [class*="text-orange-600"],
+html.dark [class*="text-orange-500"] {
+  color: #fdba74 !important; /* Bright peach-orange */
+}
+
+html.dark [class*="text-emerald-950"],
+html.dark [class*="text-emerald-900"],
+html.dark [class*="text-emerald-800"],
+html.dark [class*="text-emerald-700"],
+html.dark [class*="text-[#244626]"],
+html.dark [class*="text-[#2B542D]"],
+html.dark [class*="text-[#3C733F]"] {
+  color: #4ade80 !important; /* Bright crisp emerald */
+}
+
+html.dark [class*="text-amber-950"],
+html.dark [class*="text-amber-900"],
+html.dark [class*="text-amber-800"],
+html.dark [class*="text-amber-700"] {
+  color: #fcd34d !important; /* Bright golden amber */
+}
+
+html.dark [class*="text-purple-950"],
+html.dark [class*="text-purple-900"],
+html.dark [class*="text-purple-800"],
+html.dark [class*="text-purple-700"],
+html.dark [class*="text-[#864e86]"] {
+  color: #d8b4fe !important; /* Bright lilac purple */
+}
+
+html.dark [class*="text-blue-950"],
+html.dark [class*="text-blue-900"],
+html.dark [class*="text-blue-800"],
+html.dark [class*="text-blue-700"] {
+  color: #93c5fd !important; /* Bright sky blue */
+}
+
+/* Card badges & chips in dark mode */
+html.dark [class*="bg-orange-50"] {
+  background-color: rgba(124, 45, 18, 0.45) !important;
+  color: #fed7aa !important;
+}
+
+html.dark [class*="bg-emerald-50"],
+html.dark [class*="bg-emerald-100"] {
+  background-color: rgba(6, 78, 59, 0.45) !important;
+  color: #a7f3d0 !important;
+}
+
+html.dark [class*="bg-amber-50"],
+html.dark [class*="bg-amber-100"] {
+  background-color: rgba(120, 53, 15, 0.45) !important;
+  color: #fde68a !important;
+}
+
+html.dark [class*="bg-purple-50"],
+html.dark [class*="bg-purple-100"] {
+  background-color: rgba(88, 28, 135, 0.45) !important;
+  color: #e9d5ff !important;
+}
+
+/* Borders in dark mode */
+html.dark [class*="border-slate-200"],
+html.dark [class*="border-slate-100"],
+html.dark [class*="border-slate-300"] {
+  border-color: #334155 !important;
+}
+
+html.dark [class*="border-orange-200"],
+html.dark [class*="border-orange-300"] {
+  border-color: #7c2d12 !important;
+}
+
+/* Tables in dark mode */
+html.dark table {
+  color: #f1f5f9 !important;
+}
+
+html.dark th {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+
+html.dark td {
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+html.dark tr:hover {
+  background-color: rgba(30, 41, 59, 0.75) !important;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  border-color: #475569 !important;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0f172a !important;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155 !important;
+}
+
+/* Custom modern scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #519755;
+}
+
+/* ===================================================
+   REACT BITS UI & AESTHETIC ENHANCEMENT UTILITIES
+   =================================================== */
+
+/* Ambient Tech Grid Background */
+.bg-tech-grid {
+  background-size: 36px 36px;
+  background-image: 
+    linear-gradient(to right, rgba(81, 151, 85, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(81, 151, 85, 0.06) 1px, transparent 1px);
+}
+
+.bg-tech-dots {
+  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgba(81, 151, 85, 0.12) 1.5px, transparent 1.5px);
+}
+
+/* Glassmorphism utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.glass-dark {
+  background: rgba(11, 17, 24, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* React Bits: Shimmering Button effect */
+.shiny-button-effect {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.shiny-button-effect::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.25) 50%,
+    transparent 100%
+  );
+  transform: skewX(-20deg);
+  animation: buttonShine 3.5s infinite;
+}
+
+@keyframes buttonShine {
+  0% { left: -100%; }
+  35%, 100% { left: 200%; }
+}
+
+/* React Bits: StarBorder / Glowing Border card */
+.glow-border-card {
+  position: relative;
+  border-radius: 1.5rem;
+  background: #ffffff;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+html.dark .glow-border-card {
+  background: #111827 !important;
+  border-color: #334155 !important;
+}
+
+.glow-border-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px -10px rgba(81, 151, 85, 0.25);
+}
+
+/* React Bits: Spotlight Card Glow Effect */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html.dark .spotlight-card {
+  background: #111827 !important;
+  border-color: #334155 !important;
+}
+
+.spotlight-card:hover {
+  border-color: rgba(81, 151, 85, 0.5);
+  box-shadow: 0 20px 35px -12px rgba(81, 151, 85, 0.15);
+}
+
+/* Radiant Floating Gradient Orbs */
+.radial-orb-green {
+  background: radial-gradient(circle, rgba(168, 220, 171, 0.45) 0%, rgba(81, 151, 85, 0.05) 60%, transparent 70%);
+}
+
+.radial-orb-rose {
+  background: radial-gradient(circle, rgba(219, 170, 167, 0.35) 0%, rgba(219, 170, 167, 0.05) 60%, transparent 70%);
+}
+
+.radial-orb-lavender {
+  background: radial-gradient(circle, rgba(190, 145, 190, 0.35) 0%, rgba(190, 145, 190, 0.05) 60%, transparent 70%);
+}
+
+/* Interactive Tactile Press Animation */
+.btn-tactile {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-tactile:active {
+  transform: scale(0.97);
+}
+
+/* Leaflet Map Customization */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 1rem;
+  z-index: 10;
+}
+
+/* Print Styles for QR Code Labels */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-qr-section, #printable-qr-section * {
+    visibility: visible;
+  }
+  #printable-qr-section {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}
