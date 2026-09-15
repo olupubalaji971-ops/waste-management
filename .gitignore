@@ -12,9 +12,11 @@ backend/.env
 !backend/.env.example
 
 # Build outputs
-dist/
+/dist/
 build/
-frontend/dist/
+# frontend/dist is tracked for turnkey single-service production deployment
+!frontend/dist/
+!frontend/dist/**
 
 # Uploads & logs
 uploads/*

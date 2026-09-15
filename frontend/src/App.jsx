@@ -82,6 +82,8 @@ function App() {
         <Route path="/driver/register" element={<DriverRegisterPage />} />
         <Route path="/driver/login" element={<DriverLoginPage />} />
         <Route path="/driver/dashboard" element={<DriverDashboardPage />} />
+        <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
+        <Route path="/driver-dashboard" element={<Navigate to="/driver/dashboard" replace />} />
         <Route path="/driver/scan-qr" element={<DriverQRScannerPage />} />
 
         {/* CBMWTF Disposal Facility Portal Directory & Dashboard */}
