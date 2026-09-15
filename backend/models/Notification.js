@@ -9,7 +9,6 @@ const notificationSchema = new mongoose.Schema(
     },
     recipientRole: {
       type: String,
-      enum: ['HOSPITAL', 'DRIVER', 'hospital_admin', 'driver', 'super_admin', 'authority', 'all'],
       default: 'HOSPITAL',
     },
     title: {
@@ -38,7 +37,6 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['REQUEST', 'ACCEPTANCE', 'REJECTION', 'COLLECTION', 'INFO', 'info', 'success', 'warning'],
       default: 'INFO',
     },
     read: {

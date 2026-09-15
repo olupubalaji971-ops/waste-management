@@ -1641,10 +1641,23 @@ exports.scanQRCode = async (req, res) => {
     }
 
     if (!batch) {
+      const bUpper = (parsedBatchId || '').toUpperCase();
+      const isOsmania = bUpper.includes('OSMANIA');
+      const isNims = bUpper.includes('NIMS');
+      const isApollo = bUpper.includes('APOLLO');
+      const hospitalName = isOsmania
+        ? 'Osmania General Hospital'
+        : isNims
+        ? 'NIMS Hospital'
+        : isApollo
+        ? 'Apollo Hospitals'
+        : 'Gandhi Hospital';
+      const hospitalId = isOsmania ? 'HOSP-TG-002' : isNims ? 'HOSP-TG-003' : 'HOSP-TG-001';
+
       batch = await WasteBatch.create({
         batchId: parsedBatchId || `BWS-HOSP-${Math.floor(100 + Math.random() * 900)}`,
-        hospitalId: 'HOSP-TG-001',
-        hospitalName: 'Gandhi Hospital',
+        hospitalId,
+        hospitalName,
         category: 'YELLOW',
         wasteCategory: 'YELLOW',
         wasteType: 'Infectious Waste',
@@ -1741,124 +1754,138 @@ exports.scanQRCode = async (req, res) => {
       { new: true }
     );
 
-    // 1. NOTIFY HOSPITAL PORTAL: Order Confirmed & Waste in Transit
-    const hospitalNotif = await Notification.create({
-      recipientId: batch.hospitalId,
-      recipientRole: 'HOSPITAL',
-      title: 'Order Confirmed • Waste in Transit 🚛',
-      message: `Driver ${driverName} (${vehicleNumber}) scanned Batch ${batch.batchId} QR. Order confirmed! Waste collected and continuous GPS tracking is active towards disposal facility.`,
-      requestId: acceptedReq.requestId,
-      batchId: batch.batchId,
-      driverName,
-      driverPhone,
-      type: 'CONFIRMATION',
-      read: false,
-    });
+    // 1. Create Notifications Safely
+    let hospitalNotif = { message: `Driver ${driverName} (${vehicleNumber}) scanned Batch ${batch.batchId} QR. Order confirmed!` };
+    let driverNotif = { message: `Order #${acceptedReq.requestId} confirmed! Waste collected. Continuous live GPS tracking active.` };
+    let facilityNotif = { message: `Vehicle ${vehicleNumber} carrying ${batch.quantityKg || batch.quantity} kg (${batch.category}) waste is in transit to your yard.` };
 
-    // 2. NOTIFY DRIVER PORTAL: Order Confirmed & GPS Tracking Active
-    const driverNotif = await Notification.create({
-      recipientId: driverId,
-      recipientRole: 'DRIVER',
-      title: 'Hospital QR Verified • GPS Tracking Active 📍',
-      message: `Order #${acceptedReq.requestId} confirmed for ${batch.hospitalName}! Waste collected. Live GPS tracking active — proceed to ${targetFacName} and scan gate QR to dump waste.`,
-      requestId: acceptedReq.requestId,
-      batchId: batch.batchId,
-      type: 'TRANSIT',
-      read: false,
-    });
+    try {
+      hospitalNotif = await Notification.create({
+        recipientId: batch.hospitalId,
+        recipientRole: 'HOSPITAL',
+        title: 'Order Confirmed • Waste in Transit 🚛',
+        message: `Driver ${driverName} (${vehicleNumber}) scanned Batch ${batch.batchId} QR. Order confirmed! Waste collected and continuous GPS tracking is active towards disposal facility.`,
+        requestId: acceptedReq.requestId,
+        batchId: batch.batchId,
+        driverName,
+        driverPhone,
+        type: 'CONFIRMATION',
+        read: false,
+      });
 
-    // 3. NOTIFY FACILITY PORTAL: Incoming Carrier Dispatched
-    const facilityNotif = await Notification.create({
-      recipientId: targetFacId,
-      recipientRole: 'FACILITY',
-      title: 'Incoming Waste Carrier Dispatched 🏭',
-      message: `Vehicle ${vehicleNumber} carrying ${batch.quantityKg || batch.quantity} kg (${batch.category}) waste from ${batch.hospitalName} is in transit to your yard.`,
-      requestId: acceptedReq.requestId,
-      batchId: batch.batchId,
-      driverName,
-      vehicleNumber,
-      type: 'INCOMING',
-      read: false,
-    });
+      driverNotif = await Notification.create({
+        recipientId: driverId,
+        recipientRole: 'DRIVER',
+        title: 'Hospital QR Verified • GPS Tracking Active 📍',
+        message: `Order #${acceptedReq.requestId} confirmed for ${batch.hospitalName}! Waste collected. Live GPS tracking active — proceed to ${targetFacName} and scan gate QR to dump waste.`,
+        requestId: acceptedReq.requestId,
+        batchId: batch.batchId,
+        type: 'TRANSIT',
+        read: false,
+      });
 
-    // Mirror to Google Sheets
-    await googleSheetsService.logRow('DriverRequests', {
-      requestId: acceptedReq.requestId,
-      driverName,
-      hospitalName: batch.hospitalName,
-      batchId: batch.batchId,
-      status: 'ORDER_CONFIRMED_IN_TRANSIT',
-      timestamp: now.toISOString(),
-    });
+      facilityNotif = await Notification.create({
+        recipientId: targetFacId,
+        recipientRole: 'FACILITY',
+        title: 'Incoming Waste Carrier Dispatched 🏭',
+        message: `Vehicle ${vehicleNumber} carrying ${batch.quantityKg || batch.quantity} kg (${batch.category}) waste from ${batch.hospitalName} is in transit to your yard.`,
+        requestId: acceptedReq.requestId,
+        batchId: batch.batchId,
+        driverName,
+        vehicleNumber,
+        type: 'INCOMING',
+        read: false,
+      });
+    } catch (notifErr) {
+      console.warn('[scanQRCode] Non-critical notification error:', notifErr.message);
+    }
+
+    // Mirror to Google Sheets Safely
+    try {
+      await googleSheetsService.logRow('DriverRequests', {
+        requestId: acceptedReq.requestId,
+        driverName,
+        hospitalName: batch.hospitalName,
+        batchId: batch.batchId,
+        status: 'ORDER_CONFIRMED_IN_TRANSIT',
+        timestamp: now.toISOString(),
+      });
+    } catch (sheetErr) {
+      console.warn('[scanQRCode] Non-critical Google Sheets error:', sheetErr.message);
+    }
 
     // Broadcast real-time events across all 3 portals via Socket.IO
-    const io = req.io || global.io;
-    if (io) {
-      // 1. Hospital Room
-      io.to(`hospital:${batch.hospitalId}`).emit('newNotification', hospitalNotif);
-      io.to(`hospital_${batch.hospitalId}`).emit('newNotification', hospitalNotif);
-      io.to(`hospital:${batch.hospitalId}`).emit('order_confirmed', {
-        orderId: acceptedReq.requestId,
-        batchId: batch.batchId,
-        driverName,
-        vehicleNumber,
-        status: 'IN_TRANSIT',
-      });
+    try {
+      const io = req.io || global.io;
+      if (io) {
+        // 1. Hospital Room
+        io.to(`hospital:${batch.hospitalId}`).emit('newNotification', hospitalNotif);
+        io.to(`hospital_${batch.hospitalId}`).emit('newNotification', hospitalNotif);
+        io.to(`hospital:${batch.hospitalId}`).emit('order_confirmed', {
+          orderId: acceptedReq.requestId,
+          batchId: batch.batchId,
+          driverName,
+          vehicleNumber,
+          status: 'IN_TRANSIT',
+        });
 
-      // 2. Driver Room
-      io.to(`driver:${driverId}`).emit('newNotification', driverNotif);
-      io.to(`driver_${driverId}`).emit('newNotification', driverNotif);
-      io.to(`order:${acceptedReq.requestId}`).emit('order_confirmed', {
-        orderId: acceptedReq.requestId,
-        batchId: batch.batchId,
-        driverId,
-        trackingActive: true,
-      });
+        // 2. Driver Room
+        io.to(`driver:${driverId}`).emit('newNotification', driverNotif);
+        io.to(`driver_${driverId}`).emit('newNotification', driverNotif);
+        io.to(`order:${acceptedReq.requestId}`).emit('order_confirmed', {
+          orderId: acceptedReq.requestId,
+          batchId: batch.batchId,
+          driverId,
+          trackingActive: true,
+        });
 
-      // 3. Facility Room
-      io.to(`facility:${targetFacId}`).emit('newNotification', facilityNotif);
-      io.to(`facility_${targetFacId}`).emit('newNotification', facilityNotif);
-      io.to(`facility:${targetFacId}`).emit('carrier_in_transit', {
-        vehicleNumber,
-        hospitalName: batch.hospitalName,
-        batchId: batch.batchId,
-        quantityKg: batch.quantityKg || batch.quantity,
-        category: batch.category,
-      });
+        // 3. Facility Room
+        io.to(`facility:${targetFacId}`).emit('newNotification', facilityNotif);
+        io.to(`facility_${targetFacId}`).emit('newNotification', facilityNotif);
+        io.to(`facility:${targetFacId}`).emit('carrier_in_transit', {
+          vehicleNumber,
+          hospitalName: batch.hospitalName,
+          batchId: batch.batchId,
+          quantityKg: batch.quantityKg || batch.quantity,
+          category: batch.category,
+        });
 
-      // Global Broadcasts to notify all 3 portals in real-time
-      io.emit('order_confirmed', {
-        orderId: acceptedReq.requestId,
-        batchId: batch.batchId,
-        driverId,
-        driverName,
-        vehicleNumber,
-        hospitalId: batch.hospitalId,
-        hospitalName: batch.hospitalName,
-        facilityId: targetFacId,
-        status: 'IN_TRANSIT',
-        trackingActive: true,
-      });
-      io.emit('carrier_in_transit', {
-        vehicleNumber,
-        driverName,
-        hospitalName: batch.hospitalName,
-        batchId: batch.batchId,
-        quantityKg: batch.quantityKg || batch.quantity,
-        category: batch.category,
-        facilityId: targetFacId,
-      });
-      io.emit('tracking_started', { orderId: acceptedReq.requestId, batchId: batch.batchId, driverId, facilityId: targetFacId });
-      io.emit('requests_updated', { requestId: acceptedReq.requestId, status: 'IN_TRANSIT', data: acceptedReq });
-      io.emit('portal_status_update', {
-        step: 'ORDER_CONFIRMED',
-        orderId: acceptedReq.requestId,
-        batchId: batch.batchId,
-        hospitalMessage: hospitalNotif.message,
-        driverMessage: driverNotif.message,
-        facilityMessage: facilityNotif.message,
-      });
-      io.emit('newNotification', hospitalNotif);
+        // Global Broadcasts to notify all 3 portals in real-time
+        io.emit('order_confirmed', {
+          orderId: acceptedReq.requestId,
+          batchId: batch.batchId,
+          driverId,
+          driverName,
+          vehicleNumber,
+          hospitalId: batch.hospitalId,
+          hospitalName: batch.hospitalName,
+          facilityId: targetFacId,
+          status: 'IN_TRANSIT',
+          trackingActive: true,
+        });
+        io.emit('carrier_in_transit', {
+          vehicleNumber,
+          driverName,
+          hospitalName: batch.hospitalName,
+          batchId: batch.batchId,
+          quantityKg: batch.quantityKg || batch.quantity,
+          category: batch.category,
+          facilityId: targetFacId,
+        });
+        io.emit('tracking_started', { orderId: acceptedReq.requestId, batchId: batch.batchId, driverId, facilityId: targetFacId });
+        io.emit('requests_updated', { requestId: acceptedReq.requestId, status: 'IN_TRANSIT', data: acceptedReq });
+        io.emit('portal_status_update', {
+          step: 'ORDER_CONFIRMED',
+          orderId: acceptedReq.requestId,
+          batchId: batch.batchId,
+          hospitalMessage: hospitalNotif.message,
+          driverMessage: driverNotif.message,
+          facilityMessage: facilityNotif.message,
+        });
+        io.emit('newNotification', hospitalNotif);
+      }
+    } catch (socketErr) {
+      console.warn('[scanQRCode] Non-critical socket broadcast error:', socketErr.message);
     }
 
     return res.status(200).json({
@@ -2512,142 +2539,156 @@ exports.scanDisposalQR = async (req, res) => {
       geofenceRadiusMeters: 500,
     };
 
-    // 7. Log to Google Sheets
-    await googleSheetsService.logRow('Disposal_Logs', {
-      orderId: request.requestId,
-      batchId: request.batchId,
-      facilityId: facility.facilityId,
-      facilityName: facility.facilityName,
-      driverName: effectiveDriverName,
-      driverPhone: effectiveDriverPhone,
-      vehicleNumber: effectiveVehicleNumber,
-      hospitalName: request.hospitalName || 'Gandhi Hospital',
-      wasteCategory: request.wasteCategory || 'YELLOW',
-      quantityKg: request.wasteQuantity || 42.5,
-      status: 'DEPOSITED_AND_TREATED',
-      disposedAt: now.toISOString(),
-      qrVersionScanned: facility.qrVersion || 1,
-      newRotatedVersion: nextVersion,
-    });
+    // 7. Log to Google Sheets Safely
+    try {
+      await googleSheetsService.logRow('Disposal_Logs', {
+        orderId: request.requestId,
+        batchId: request.batchId,
+        facilityId: facility.facilityId,
+        facilityName: facility.facilityName,
+        driverName: effectiveDriverName,
+        driverPhone: effectiveDriverPhone,
+        vehicleNumber: effectiveVehicleNumber,
+        hospitalName: request.hospitalName || 'Gandhi Hospital',
+        wasteCategory: request.wasteCategory || 'YELLOW',
+        quantityKg: request.wasteQuantity || 42.5,
+        status: 'DEPOSITED_AND_TREATED',
+        disposedAt: now.toISOString(),
+        qrVersionScanned: facility.qrVersion || 1,
+        newRotatedVersion: nextVersion,
+      });
+    } catch (sheetErr) {
+      console.warn('[scanDisposalQR] Non-critical Google Sheets error:', sheetErr.message);
+    }
 
-    // 8. NOTIFY HOSPITAL: Waste Deposited, Custody Transfer Complete & Live Tracking Concluded
-    const hospitalNotif = await Notification.create({
-      recipientId: request.hospitalId,
-      recipientRole: 'HOSPITAL',
-      title: '✅ Waste Batch Handover Completed!',
-      message: `Bio-waste Batch ${request.batchId} (${request.wasteQuantity} kg ${request.wasteCategory}) has been successfully dumped and received at ${facility.facilityName} by driver ${effectiveDriverName} (${effectiveVehicleNumber}). Custody transfer is 100% complete.`,
-      requestId: request.requestId,
-      batchId: request.batchId,
-      driverName: effectiveDriverName,
-      driverPhone: effectiveDriverPhone,
-      facilityName: facility.facilityName,
-      type: 'success',
-      read: false,
-    });
+    // 8. Create Notifications Safely
+    let hospitalNotif = { message: `Bio-waste Batch ${request.batchId} successfully received at ${facility.facilityName}.` };
+    let driverNotif = { message: `Waste safely dumped at ${facility.facilityName}. Order #${request.requestId} complete!` };
+    let facilityNotif = { message: `Driver ${effectiveDriverName} (${effectiveVehicleNumber}) dumped waste. Gate QR auto-rotated to Version ${nextVersion}.` };
 
-    // 8b. NOTIFY DRIVER: Waste Dumped Successfully
-    const driverNotif = await Notification.create({
-      recipientId: effectiveDriverId,
-      recipientRole: 'DRIVER',
-      title: 'Waste Dumped Successfully ✓',
-      message: `Waste safely dumped at ${facility.facilityName}. Order #${request.requestId} complete! Live GPS tracking concluded.`,
-      requestId: request.requestId,
-      batchId: request.batchId,
-      type: 'success',
-      read: false,
-    });
+    try {
+      hospitalNotif = await Notification.create({
+        recipientId: request.hospitalId,
+        recipientRole: 'HOSPITAL',
+        title: '✅ Waste Batch Handover Completed!',
+        message: `Bio-waste Batch ${request.batchId} (${request.wasteQuantity} kg ${request.wasteCategory}) has been successfully dumped and received at ${facility.facilityName} by driver ${effectiveDriverName} (${effectiveVehicleNumber}). Custody transfer is 100% complete.`,
+        requestId: request.requestId,
+        batchId: request.batchId,
+        driverName: effectiveDriverName,
+        driverPhone: effectiveDriverPhone,
+        facilityName: facility.facilityName,
+        type: 'success',
+        read: false,
+      });
 
-    // 8c. NOTIFY FACILITY: Waste Intake Registered
-    const facilityNotif = await Notification.create({
-      recipientId: facility.facilityId,
-      recipientRole: 'FACILITY',
-      title: 'Waste Intake Recorded ✓',
-      message: `Driver ${effectiveDriverName} (${effectiveVehicleNumber}) dumped ${request.wasteQuantity} kg ${request.wasteCategory} waste from ${request.hospitalName}. Gate QR auto-rotated to Version ${nextVersion}.`,
-      requestId: request.requestId,
-      batchId: request.batchId,
-      type: 'success',
-      read: false,
-    });
+      driverNotif = await Notification.create({
+        recipientId: effectiveDriverId,
+        recipientRole: 'DRIVER',
+        title: 'Waste Dumped Successfully ✓',
+        message: `Waste safely dumped at ${facility.facilityName}. Order #${request.requestId} complete! Live GPS tracking concluded.`,
+        requestId: request.requestId,
+        batchId: request.batchId,
+        type: 'success',
+        read: false,
+      });
+
+      facilityNotif = await Notification.create({
+        recipientId: facility.facilityId,
+        recipientRole: 'FACILITY',
+        title: 'Waste Intake Recorded ✓',
+        message: `Driver ${effectiveDriverName} (${effectiveVehicleNumber}) dumped ${request.wasteQuantity} kg ${request.wasteCategory} waste from ${request.hospitalName}. Gate QR auto-rotated to Version ${nextVersion}.`,
+        requestId: request.requestId,
+        batchId: request.batchId,
+        type: 'success',
+        read: false,
+      });
+    } catch (notifErr) {
+      console.warn('[scanDisposalQR] Non-critical notification error:', notifErr.message);
+    }
 
     // 9. BROADCAST REAL-TIME NOTIFICATIONS VIA SOCKET.IO
-    const io = req.io || global.io;
-    const completionPayload = {
-      orderId: request.requestId,
-      batchId: request.batchId,
-      hospitalId: request.hospitalId,
-      hospitalName: request.hospitalName,
-      facilityId: facility.facilityId,
-      facilityName: facility.facilityName,
-      driverName: effectiveDriverName,
-      driverPhone: effectiveDriverPhone,
-      vehicleNumber: effectiveVehicleNumber,
-      wasteQuantity: request.wasteQuantity,
-      wasteCategory: request.wasteCategory,
-      completedAt: now.toISOString(),
-      status: 'COMPLETED',
-      notification: hospitalNotif,
-    };
-
-    const facilityIntakePayload = {
-      orderId: request.requestId,
-      batchId: request.batchId,
-      hospitalId: request.hospitalId,
-      hospitalName: request.hospitalName,
-      driverId: effectiveDriverId,
-      driverName: effectiveDriverName,
-      driverPhone: effectiveDriverPhone,
-      vehicleNumber: effectiveVehicleNumber,
-      wasteCategory: request.wasteCategory || 'YELLOW',
-      wasteQuantity: request.wasteQuantity || 42.5,
-      disposedAt: now.toISOString(),
-      disposalFacilityId: facility.facilityId,
-      disposalFacilityName: facility.facilityName,
-      treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
-      status: 'COMPLETED',
-    };
-
-    if (io) {
-      // 1. Notify Origin Hospital
-      io.to(`hospital:${request.hospitalId}`).emit('newNotification', hospitalNotif);
-      io.to(`hospital_${request.hospitalId}`).emit('newNotification', hospitalNotif);
-      io.to(`hospital:${request.hospitalId}`).emit('batch_completed', completionPayload);
-      io.to(`hospital_${request.hospitalId}`).emit('batch_completed', completionPayload);
-      io.to(`hospital:${request.hospitalId}`).emit('tracking_stopped', {
+    try {
+      const io = req.io || global.io;
+      const completionPayload = {
         orderId: request.requestId,
         batchId: request.batchId,
+        hospitalId: request.hospitalId,
+        hospitalName: request.hospitalName,
+        facilityId: facility.facilityId,
         facilityName: facility.facilityName,
-        completedAt: now,
-      });
+        driverName: effectiveDriverName,
+        driverPhone: effectiveDriverPhone,
+        vehicleNumber: effectiveVehicleNumber,
+        wasteQuantity: request.wasteQuantity,
+        wasteCategory: request.wasteCategory,
+        completedAt: now.toISOString(),
+        status: 'COMPLETED',
+        notification: hospitalNotif,
+      };
 
-      // 2. Notify Driver
-      io.to(`driver:${effectiveDriverId}`).emit('newNotification', driverNotif);
-      io.to(`driver_${effectiveDriverId}`).emit('newNotification', driverNotif);
-      io.to(`order:${request.requestId}`).emit('order_completed', {
-        ...completionPayload,
-        facility: updatedFacility,
-        trackingActive: false,
-      });
-
-      // 3. Notify Facility Portal with Complete Driver Details & Refresh QR
-      io.to(`facility:${facility.facilityId}`).emit('newNotification', facilityNotif);
-      io.to(`facility_${facility.facilityId}`).emit('newNotification', facilityNotif);
-      io.to(`facility:${facility.facilityId}`).emit('waste_deposited', facilityIntakePayload);
-      io.to(`facility:${facility.facilityId}`).emit('qr_refreshed', refreshedQRPayload);
-      io.emit('facility_intake_received', facilityIntakePayload);
-      io.emit('waste_deposited', facilityIntakePayload);
-      io.emit('facility_qr_updated', { facilityId: facility.facilityId, qrPayload: refreshedQRPayload });
-      io.emit('requests_updated', { requestId: request.requestId, status: 'COMPLETED' });
-      io.emit('batch_completed', completionPayload);
-      io.emit('order_completed', completionPayload);
-      io.emit('portal_status_update', {
-        step: 'WASTE_DUMPED_COMPLETED',
+      const facilityIntakePayload = {
         orderId: request.requestId,
         batchId: request.batchId,
-        hospitalMessage: hospitalNotif.message,
-        driverMessage: driverNotif.message,
-        facilityMessage: facilityNotif.message,
-      });
-      io.emit('newNotification', hospitalNotif);
+        hospitalId: request.hospitalId,
+        hospitalName: request.hospitalName,
+        driverId: effectiveDriverId,
+        driverName: effectiveDriverName,
+        driverPhone: effectiveDriverPhone,
+        vehicleNumber: effectiveVehicleNumber,
+        wasteCategory: request.wasteCategory || 'YELLOW',
+        wasteQuantity: request.wasteQuantity || 42.5,
+        disposedAt: now.toISOString(),
+        disposalFacilityId: facility.facilityId,
+        disposalFacilityName: facility.facilityName,
+        treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
+        status: 'COMPLETED',
+      };
+
+      if (io) {
+        // 1. Notify Origin Hospital
+        io.to(`hospital:${request.hospitalId}`).emit('newNotification', hospitalNotif);
+        io.to(`hospital_${request.hospitalId}`).emit('newNotification', hospitalNotif);
+        io.to(`hospital:${request.hospitalId}`).emit('batch_completed', completionPayload);
+        io.to(`hospital_${request.hospitalId}`).emit('batch_completed', completionPayload);
+        io.to(`hospital:${request.hospitalId}`).emit('tracking_stopped', {
+          orderId: request.requestId,
+          batchId: request.batchId,
+          facilityName: facility.facilityName,
+          completedAt: now,
+        });
+
+        // 2. Notify Driver
+        io.to(`driver:${effectiveDriverId}`).emit('newNotification', driverNotif);
+        io.to(`driver_${effectiveDriverId}`).emit('newNotification', driverNotif);
+        io.to(`order:${request.requestId}`).emit('order_completed', {
+          ...completionPayload,
+          facility: updatedFacility,
+          trackingActive: false,
+        });
+
+        // 3. Notify Facility Portal with Complete Driver Details & Refresh QR
+        io.to(`facility:${facility.facilityId}`).emit('newNotification', facilityNotif);
+        io.to(`facility_${facility.facilityId}`).emit('newNotification', facilityNotif);
+        io.to(`facility:${facility.facilityId}`).emit('waste_deposited', facilityIntakePayload);
+        io.to(`facility:${facility.facilityId}`).emit('qr_refreshed', refreshedQRPayload);
+        io.emit('facility_intake_received', facilityIntakePayload);
+        io.emit('waste_deposited', facilityIntakePayload);
+        io.emit('facility_qr_updated', { facilityId: facility.facilityId, qrPayload: refreshedQRPayload });
+        io.emit('requests_updated', { requestId: request.requestId, status: 'COMPLETED' });
+        io.emit('batch_completed', completionPayload);
+        io.emit('order_completed', completionPayload);
+        io.emit('portal_status_update', {
+          step: 'WASTE_DUMPED_COMPLETED',
+          orderId: request.requestId,
+          batchId: request.batchId,
+          hospitalMessage: hospitalNotif.message,
+          driverMessage: driverNotif.message,
+          facilityMessage: facilityNotif.message,
+        });
+        io.emit('newNotification', hospitalNotif);
+      }
+    } catch (socketErr) {
+      console.warn('[scanDisposalQR] Non-critical socket broadcast error:', socketErr.message);
     }
 
     return res.status(200).json({
