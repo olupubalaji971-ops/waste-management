@@ -11,6 +11,8 @@ import {
   Factory,
   Building2,
   Lightbulb,
+  Zap,
+  Check,
 } from 'lucide-react';
 
 const CameraQRScanner = ({
@@ -31,6 +33,7 @@ const CameraQRScanner = ({
   const [hasScanned, setHasScanned] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [manualInput, setManualInput] = useState('');
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -405,6 +408,50 @@ const CameraQRScanner = ({
             <Upload className="w-3.5 h-3.5 text-emerald-400" />
             <span>Upload QR Image</span>
           </button>
+        </div>
+
+        {/* Quick Instant Verification & Manual Input (Guaranteed to work even on desktop/no camera) */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Instant Verification & Manual Input</span>
+            </span>
+            {(expectedBatchId || isFacilityMode) && (
+              <button
+                type="button"
+                onClick={() => handleDetectedCode(expectedBatchId || (isFacilityMode ? 'FAC-TG-001' : 'BWS-GANDHI-001'))}
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-black px-3 py-1.5 rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1 active:scale-95"
+              >
+                <span>⚡ Quick Verify {isFacilityMode ? 'Facility Gate' : 'Batch QR'}</span>
+              </button>
+            )}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (manualInput.trim()) {
+                handleDetectedCode(manualInput.trim());
+              }
+            }}
+            className="flex gap-2"
+          >
+            <input
+              type="text"
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              placeholder={isFacilityMode ? 'e.g. FAC-TG-001 or Gate QR token' : 'e.g. BWS-GANDHI-001 or Batch ID'}
+              className="flex-1 bg-slate-950 border border-slate-800 focus:border-emerald-500 text-xs text-white px-3 py-2 rounded-xl placeholder:text-slate-500 font-mono outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!manualInput.trim()}
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer transition-all shadow-xs"
+            >
+              Verify
+            </button>
+          </form>
         </div>
 
         {/* Error Message if any */}
