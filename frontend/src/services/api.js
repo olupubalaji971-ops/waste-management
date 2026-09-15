@@ -1,7 +1,19 @@
 import axios from 'axios';
 
+// Resolve backend API URL in production & local environments:
+const resolveBaseURL = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
+  }
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return `${import.meta.env.VITE_BACKEND_URL.replace(/\/+$/, '')}/api`;
+  }
+  return '/api';
+};
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: resolveBaseURL(),
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },

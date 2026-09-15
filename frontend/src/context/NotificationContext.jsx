@@ -50,7 +50,11 @@ export const NotificationProvider = ({ children }) => {
       return;
     }
 
-    const socketUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const socketUrl =
+      import.meta.env.VITE_BACKEND_URL ||
+      (typeof window !== 'undefined' && !import.meta.env.DEV
+        ? window.location.origin
+        : 'http://localhost:5000');
     const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
     });
