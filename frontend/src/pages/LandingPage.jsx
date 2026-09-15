@@ -150,7 +150,7 @@ const LandingPage = () => {
                 </ShinyButton>
               </Link>
 
-              <Link to="/driver-portal">
+              <Link to="/driver/dashboard">
                 <ShinyButton variant="amber" size="lg" icon={Truck}>
                   <span>{t('driverPortalBadge', 'DRIVER FLEET')}</span>
                 </ShinyButton>
@@ -263,7 +263,7 @@ const LandingPage = () => {
               </div>
 
               <div className="pt-6 mt-4">
-                <Link to="/driver-portal" className="block w-full">
+                <Link to="/driver/dashboard" className="block w-full">
                   <ShinyButton variant="amber" size="md" className="w-full">
                     <span>{t('enterDriverPortal', 'ENTER DRIVER PORTAL')}</span>
                     <ArrowRight className="w-4 h-4" />
@@ -513,7 +513,7 @@ const LandingPage = () => {
                     } else if (f.id === 'facilities') {
                       navigate('/facility/login');
                     } else if (f.id === 'driver' || f.id === 'scanner') {
-                      navigate('/driver-portal');
+                      navigate('/driver/dashboard');
                     } else {
                       navigate('/hospitals');
                     }

@@ -116,12 +116,28 @@ const DriverDashboardPage = () => {
     }
   };
 
-  // Initial Fetch + Fast Polling (2 seconds)
+  // Initial Fetch + Fast Polling (2 seconds) + Real-Time Socket Updates
   useEffect(() => {
     fetchDriverData();
     const interval = setInterval(fetchDriverData, 2000);
     return () => clearInterval(interval);
   }, [user]);
+
+  // Real-time socket listener for incoming hospital pickup requests
+  useEffect(() => {
+    if (!socket) return;
+    const handleSocketUpdate = () => {
+      fetchDriverData();
+    };
+    socket.on('new_pickup_request', handleSocketUpdate);
+    socket.on('requests_updated', handleSocketUpdate);
+    socket.on('newNotification', handleSocketUpdate);
+    return () => {
+      socket.off('new_pickup_request', handleSocketUpdate);
+      socket.off('requests_updated', handleSocketUpdate);
+      socket.off('newNotification', handleSocketUpdate);
+    };
+  }, [socket]);
 
   // Find the single active working job
   const activeJob = myRequests.find((r) =>
@@ -142,9 +158,9 @@ const DriverDashboardPage = () => {
 
   // Incoming hospital pickup requests awaiting driver acceptance (Combine both batches and requests)
   const incomingRequests = [
-    ...availableBatches.filter((b) => b.status === 'REQUESTED'),
+    ...availableBatches.filter((b) => ['REQUESTED', 'ACTIVE', 'GENERATED', 'PENDING'].includes(b.status)),
     ...myRequests
-      .filter((r) => r.status === 'REQUESTED')
+      .filter((r) => ['REQUESTED', 'PENDING'].includes(r.status))
       .map((r) => ({
         batchId: r.batchId,
         hospitalName: r.hospitalName,
@@ -154,8 +170,11 @@ const DriverDashboardPage = () => {
         quantity: r.wasteQuantity || 45.0,
         date: r.requestedAt ? new Date(r.requestedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         time: r.requestedAt ? new Date(r.requestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-        status: 'REQUESTED',
+        status: r.status,
         requestId: r.requestId,
+        pickupLocation: r.pickupLocation,
+        hospitalAddress: r.hospitalAddress || r.pickupLocation,
+        isRequestedByHospital: true,
       })),
   ].filter((item, index, self) => index === self.findIndex((t) => t.batchId === item.batchId));
 
@@ -638,18 +657,10 @@ const DriverDashboardPage = () => {
 
   const currentStep = getWorkflowStep();
 
-  // Driver session guard & redirect if not driver
+  // Seamless fleet access: always allow driver dashboard preview without kicking user out
   useEffect(() => {
-    const saved = localStorage.getItem('biowaste_user');
-    let parsed = null;
-    if (saved) {
-      try { parsed = JSON.parse(saved); } catch (e) {}
-    }
-    const currentRole = user?.role || parsed?.role;
-    if (!currentRole || currentRole !== 'driver') {
-      navigate('/driver-portal');
-    }
-  }, [user, navigate]);
+    // Keep driverProfile active for full cross-portal demonstration
+  }, [user]);
 
   // Handle Logout
   const handleLogout = () => {

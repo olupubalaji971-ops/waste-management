@@ -836,9 +836,9 @@ exports.getAvailableBatches = async (req, res) => {
 
     const batches = await WasteBatch.find({
       status: { $in: ['ACTIVE', 'GENERATED', 'PENDING', 'REQUESTED'] },
-    });
+    }).lean();
 
-    const hospitals = await Hospital.find();
+    const hospitals = await Hospital.find().lean();
     const hospitalMap = {};
     hospitals.forEach((h) => {
       hospitalMap[h.hospitalId] = h;
@@ -852,6 +852,10 @@ exports.getAvailableBatches = async (req, res) => {
 
       return {
         ...b,
+        batchId: b.batchId,
+        status: b.status,
+        category: b.category || b.wasteCategory || 'YELLOW',
+        quantityKg: b.quantityKg || b.quantity || 45.0,
         hospitalName: b.hospitalName || hosp.name || 'Gandhi Hospital',
         hospitalAddress: hosp.address || b.pickupLocation || 'Musheerabad, Secunderabad',
         hospitalDistrict: hosp.district || 'Hyderabad',
@@ -1229,7 +1233,7 @@ exports.getDriverRequests = async (req, res) => {
     const driverName = req.query?.driverName || req.user?.name;
 
     // Return all requests so the common driver has complete access across all Telangana hospitals
-    const requests = await DriverRequest.find();
+    const requests = await DriverRequest.find().sort({ createdAt: -1, requestedAt: -1 }).lean();
 
     return res.status(200).json({
       success: true,

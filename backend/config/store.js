@@ -55,6 +55,8 @@ class InMemoryCollection {
         return chain;
       },
       select: () => chain,
+      lean: () => chain,
+      populate: () => chain,
       then: (resolve, reject) => {
         try {
           resolve(chain._data);
@@ -89,6 +91,8 @@ class InMemoryCollection {
     const chain = {
       _doc: doc,
       select: () => chain,
+      lean: () => chain,
+      populate: () => chain,
       then: (resolve) => resolve(chain._doc),
     };
     return chain;
