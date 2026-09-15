@@ -91,21 +91,39 @@ const HospitalDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [batchesRes, requestsRes, facRes] = await Promise.all([
+      const [batchesRes, requestsRes, facRes] = await Promise.allSettled([
         api.get(`/hospital/waste?hospitalId=${hospitalId}`),
         api.get(`/hospital/requests?hospitalId=${hospitalId}`),
         api.get('/facilities'),
       ]);
 
-      if (batchesRes.data?.success) {
-        setActiveBatches(batchesRes.data.data);
+      if (batchesRes.status === 'fulfilled' && batchesRes.value?.data?.success) {
+        setActiveBatches(batchesRes.value.data.data);
       }
-      if (requestsRes.data?.success) {
-        setDriverRequests(requestsRes.data.data);
+      if (requestsRes.status === 'fulfilled' && requestsRes.value?.data?.success) {
+        setDriverRequests(requestsRes.value.data.data);
       }
-      if (facRes.data?.success) {
-        setDisposalFacilities(facRes.data.data);
+      if (facRes.status === 'fulfilled' && facRes.value?.data?.success) {
+        setDisposalFacilities(facRes.value.data.data);
       }
+
+      // Cross-tab synchronization fallback
+      try {
+        const storedBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+        if (storedBatches.length > 0) {
+          setActiveBatches((prev) => {
+            const combined = [...prev, ...storedBatches.filter((b) => b.hospitalId === hospitalId || !b.hospitalId)];
+            return combined.filter((b, idx, self) => idx === self.findIndex((t) => t.batchId === b.batchId));
+          });
+        }
+        const storedReqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+        if (storedReqs.length > 0) {
+          setDriverRequests((prev) => {
+            const combined = [...prev, ...storedReqs.filter((r) => r.hospitalId === hospitalId || !r.hospitalId)];
+            return combined.filter((r, idx, self) => idx === self.findIndex((t) => (t.requestId || t.batchId) === (r.requestId || r.batchId)));
+          });
+        }
+      } catch (e) {}
     } catch (err) {
       console.warn('Dashboard fetch warning:', err);
     } finally {
@@ -116,7 +134,12 @@ const HospitalDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
     const interval = setInterval(fetchDashboardData, 2000);
-    return () => clearInterval(interval);
+    const handleStorage = () => fetchDashboardData();
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [activeHospital, hospitalId]);
 
   useEffect(() => {

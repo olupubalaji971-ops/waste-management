@@ -420,7 +420,18 @@ const CameraQRScanner = ({
             {(expectedBatchId || isFacilityMode) && (
               <button
                 type="button"
-                onClick={() => handleDetectedCode(expectedBatchId || (isFacilityMode ? 'FAC-TG-001' : 'BWS-GANDHI-001'))}
+                onClick={() =>
+                  handleDetectedCode(
+                    isFacilityMode
+                      ? JSON.stringify({
+                          type: 'DISPOSAL_FACILITY',
+                          facilityId: expectedBatchId || 'FAC-TG-001',
+                          version: 1,
+                          token: 'FAC_RAMKY_SECURE_TOKEN_2026_A98',
+                        })
+                      : expectedBatchId || 'BWS-GANDHI-001'
+                  )
+                }
                 className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-black px-3 py-1.5 rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1 active:scale-95"
               >
                 <span>⚡ Quick Verify {isFacilityMode ? 'Facility Gate' : 'Batch QR'}</span>

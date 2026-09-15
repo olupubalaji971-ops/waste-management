@@ -526,7 +526,43 @@ const DriverDashboardPage = () => {
         if (res.data?.success) {
           setScanSuccessResult(res.data.data);
           confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
-          showToast('🎉 FACILITY INTAKE VERIFIED! Waste deposited & GPS tracking concluded.', 'success', 'Disposal Complete');
+          showToast('🎉 FACILITY INTAKE VERIFIED! Waste deposited & complete disposal cycle finished.', 'success', 'Disposal Complete');
+
+          const completedOrderId = targetJob?.requestId || res.data.data?.requestId;
+          const completedBatchId = targetJob?.batchId || batchId;
+
+          // Immediately update local state to COMPLETED
+          setMyRequests((prev) =>
+            prev.map((r) =>
+              r.requestId === completedOrderId || r.batchId === completedBatchId
+                ? { ...r, status: 'COMPLETED', trackingActive: false }
+                : r
+            )
+          );
+
+          // Update localStorage so all portals show COMPLETED
+          try {
+            const reqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+            localStorage.setItem(
+              'biowaste_driver_requests',
+              JSON.stringify(
+                reqs.map((r) =>
+                  r.requestId === completedOrderId || r.batchId === completedBatchId
+                    ? { ...r, status: 'COMPLETED', trackingActive: false }
+                    : r
+                )
+              )
+            );
+            const batches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+            localStorage.setItem(
+              'biowaste_hospital_batches',
+              JSON.stringify(
+                batches.map((b) => (b.batchId === completedBatchId ? { ...b, status: 'COMPLETED' } : b))
+              )
+            );
+            window.dispatchEvent(new Event('storage'));
+          } catch (e) {}
+
           await fetchDriverData();
           setTimeout(() => {
             closeScannerModal();
@@ -551,7 +587,43 @@ const DriverDashboardPage = () => {
         if (res.data?.success) {
           setScanSuccessResult(res.data.data);
           confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
-          showToast('✓ HOSPITAL & BATCH QR VERIFIED! Ready to collect waste.', 'success', 'Verified');
+          showToast('🎉 ORDER CONFIRMED! Hospital QR verified. Continuous Live GPS Tracker activated!', 'success', 'Order Confirmed');
+
+          const activeOrderId = targetJob?.requestId || res.data.data?.requestId;
+          const activeBatchId = targetJob?.batchId || batchId;
+
+          // Immediately update local state to IN_TRANSIT with trackingActive
+          setMyRequests((prev) =>
+            prev.map((r) =>
+              r.requestId === activeOrderId || r.batchId === activeBatchId
+                ? { ...r, status: 'IN_TRANSIT', trackingActive: true }
+                : r
+            )
+          );
+
+          // Update localStorage so Hospital Portal tracker immediately sees IN_TRANSIT and renders live map
+          try {
+            const reqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+            localStorage.setItem(
+              'biowaste_driver_requests',
+              JSON.stringify(
+                reqs.map((r) =>
+                  r.requestId === activeOrderId || r.batchId === activeBatchId
+                    ? { ...r, status: 'IN_TRANSIT', trackingActive: true }
+                    : r
+                )
+              )
+            );
+            const batches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+            localStorage.setItem(
+              'biowaste_hospital_batches',
+              JSON.stringify(
+                batches.map((b) => (b.batchId === activeBatchId ? { ...b, status: 'IN_TRANSIT' } : b))
+              )
+            );
+            window.dispatchEvent(new Event('storage'));
+          } catch (e) {}
+
           await fetchDriverData();
           setTimeout(() => {
             closeScannerModal();
