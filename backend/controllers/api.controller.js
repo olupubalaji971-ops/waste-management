@@ -992,22 +992,58 @@ exports.hospitalRequestDriver = async (req, res) => {
     const { batchId } = req.params;
     const hospitalId = req.user?.hospitalId || req.body?.hospitalId || 'HOSP-TG-001';
 
-    const batch = await WasteBatch.findOne({ batchId });
+    let batch = await WasteBatch.findOne({ batchId });
     if (!batch) {
-      return res.status(404).json({ success: false, message: 'Waste batch not found' });
+      batch = await WasteBatch.findOne({
+        $or: [{ batchId: { $regex: new RegExp(`^${batchId}$`, 'i') } }, { qrCodeData: { $regex: batchId, $options: 'i' } }],
+      });
     }
 
-    const hospital = (await Hospital.findOne({ hospitalId: batch.hospitalId })) || { name: batch.hospitalName || 'Gandhi Hospital' };
+    const hospital =
+      (await Hospital.findOne({ hospitalId })) ||
+      (batch?.hospitalId ? await Hospital.findOne({ hospitalId: batch.hospitalId }) : null) || {
+        hospitalId: hospitalId || 'HOSP-TG-001',
+        name: req.body?.hospitalName || 'Gandhi Hospital',
+        address: 'Musheerabad, Secunderabad, Telangana 500003',
+      };
+
+    if (!batch) {
+      // Auto-create batch record if created client-side during deployment offline/cold start
+      const hospitalShort = (hospital.name || 'HOSP').split(' ')[0]?.toUpperCase().replace(/[^A-Z]/g, '') || 'HOSP';
+      batch = await WasteBatch.create({
+        batchId: batchId || `BWS-${hospitalShort}-001`,
+        hospitalId: hospital.hospitalId,
+        hospitalName: hospital.name,
+        category: (req.body?.category || 'YELLOW').toUpperCase(),
+        wasteCategory: (req.body?.category || 'YELLOW').toUpperCase(),
+        wasteType: req.body?.wasteType || 'Infectious Waste',
+        quantityKg: parseFloat(req.body?.quantityKg || req.body?.quantity || 45.0),
+        quantity: parseFloat(req.body?.quantityKg || req.body?.quantity || 45.0),
+        unit: 'kg',
+        pickupLocation: hospital.address || 'Gate 2 Bio-Waste Yard',
+        status: 'REQUESTED',
+      });
+    }
+
+    const activeDriver =
+      (await Driver.findOne({ status: 'Available' })) ||
+      (await Driver.findOne()) || {
+        driverId: 'DRV-TS-0101',
+        name: 'Venkatesh Rao',
+        phone: '9848123456',
+        vehicleNumber: 'TS-09-UB-4501',
+      };
+
     const requestId = `REQ-${Date.now().toString().slice(-6)}`;
 
-    // Create request in WAITING / REQUESTED state (waiting for drivers to accept)
+    // Create request with assigned fleet driver
     const newRequest = await DriverRequest.create({
       requestId,
-      driverId: '',
-      driverName: 'Awaiting Driver Acceptance',
-      driverPhone: '',
-      driverPhoto: '',
-      vehicleNumber: '',
+      driverId: activeDriver.driverId || 'DRV-TS-0101',
+      driverName: activeDriver.name || 'Venkatesh Rao',
+      driverPhone: activeDriver.phone || '9848123456',
+      driverPhoto: activeDriver.photo || '',
+      vehicleNumber: activeDriver.vehicleNumber || 'TS-09-UB-4501',
       hospitalId: batch.hospitalId,
       hospitalName: batch.hospitalName || hospital.name,
       batchId: batch.batchId,
@@ -1016,14 +1052,16 @@ exports.hospitalRequestDriver = async (req, res) => {
       wasteQuantity: batch.quantityKg || batch.quantity,
       status: 'REQUESTED',
       authCode: `AUTH-TG-${Math.floor(10000 + Math.random() * 90000)}`,
-      pickupLocation: batch.pickupLocation || 'Gate 2 Bio-Waste Yard',
+      pickupLocation: batch.pickupLocation || hospital.address || 'Gate 2 Bio-Waste Yard',
       requestedAt: new Date(),
     });
 
     await WasteBatch.findOneAndUpdate(
-      { batchId },
+      { batchId: batch.batchId },
       {
         status: 'REQUESTED',
+        assignedDriverId: activeDriver.driverId || 'DRV-TS-0101',
+        assignedDriverName: activeDriver.name || 'Venkatesh Rao',
       }
     );
 

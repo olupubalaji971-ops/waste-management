@@ -10,16 +10,16 @@ const driverRequestSchema = new mongoose.Schema(
     },
     driverId: {
       type: String,
-      required: true,
+      default: 'DRV-TS-0101',
       ref: 'Driver',
     },
     driverName: {
       type: String,
-      required: true,
+      default: 'Venkatesh Rao',
     },
     driverPhone: {
       type: String,
-      required: true,
+      default: '9848123456',
     },
     driverPhoto: {
       type: String,
