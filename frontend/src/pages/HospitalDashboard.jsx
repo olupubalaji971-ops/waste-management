@@ -186,9 +186,18 @@ const HospitalDashboard = () => {
 
       if (res.data?.success) {
         const createdData = res.data.data;
+        // Broadcast to localStorage for immediate multi-tab sync with Driver Portal
+        try {
+          const currentBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+          localStorage.setItem(
+            'biowaste_hospital_batches',
+            JSON.stringify([createdData, ...currentBatches.filter((b) => b.batchId !== createdData.batchId)])
+          );
+          window.dispatchEvent(new Event('storage'));
+        } catch (e) {}
+
         showToast(`Created Batch ${createdData?.batchId}! QR Code Generated.`, 'success', 'Batch Generated');
         setIsCreateBatchOpen(false);
-        // Automatically open the dynamic QR code modal so hospital sees QR code immediately!
         setSelectedBatchForQr(createdData);
         await fetchDashboardData();
         return;
@@ -220,6 +229,15 @@ const HospitalDashboard = () => {
         status: 'ACTIVE',
       };
 
+      try {
+        const currentBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+        localStorage.setItem(
+          'biowaste_hospital_batches',
+          JSON.stringify([fallbackBatch, ...currentBatches.filter((b) => b.batchId !== fallbackBatch.batchId)])
+        );
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {}
+
       setActiveBatches((prev) => [fallbackBatch, ...prev]);
       setIsCreateBatchOpen(false);
       setSelectedBatchForQr(fallbackBatch);
@@ -236,8 +254,24 @@ const HospitalDashboard = () => {
       });
 
       if (res.data?.success) {
+        const reqData = res.data.data;
+        // Sync to localStorage for instant driver portal appearance
+        try {
+          const currentReqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+          localStorage.setItem(
+            'biowaste_driver_requests',
+            JSON.stringify([reqData, ...currentReqs.filter((r) => r.batchId !== batchId && r.requestId !== reqData?.requestId)])
+          );
+          const currentBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+          localStorage.setItem(
+            'biowaste_hospital_batches',
+            JSON.stringify(currentBatches.map((b) => (b.batchId === batchId ? { ...b, status: 'REQUESTED' } : b)))
+          );
+          window.dispatchEvent(new Event('storage'));
+        } catch (e) {}
+
         showToast(
-          `Driver requested! Assigned to fleet driver (${res.data.data?.driverName || 'Venkatesh Rao'}). Driver notified to arrive & scan QR code.`,
+          `Driver requested! Assigned to fleet driver (${reqData?.driverName || 'Venkatesh Rao'}). Driver notified to arrive & scan QR code.`,
           'success',
           'Driver Requested'
         );
@@ -269,6 +303,20 @@ const HospitalDashboard = () => {
         pickupLocation: activeHospital.address || 'Gate 2 Bio-Waste Yard',
         requestedAt: new Date().toISOString(),
       };
+
+      try {
+        const currentReqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+        localStorage.setItem(
+          'biowaste_driver_requests',
+          JSON.stringify([fallbackRequest, ...currentReqs.filter((r) => r.batchId !== batchId && r.requestId !== fallbackRequest.requestId)])
+        );
+        const currentBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+        localStorage.setItem(
+          'biowaste_hospital_batches',
+          JSON.stringify(currentBatches.map((b) => (b.batchId === batchId ? { ...b, status: 'REQUESTED' } : b)))
+        );
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {}
 
       setDriverRequests((prev) => [fallbackRequest, ...prev]);
       showToast(

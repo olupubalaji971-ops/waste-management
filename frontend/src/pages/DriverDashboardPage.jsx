@@ -94,21 +94,39 @@ const DriverDashboardPage = () => {
   // Fetch driver data, incoming requests, and authorized facilities with proximity distance
   const fetchDriverData = async () => {
     try {
-      const [batchesRes, reqsRes, facRes] = await Promise.all([
+      const [batchesRes, reqsRes, facRes] = await Promise.allSettled([
         api.get(`/driver/available-batches?latitude=${currentGps.latitude}&longitude=${currentGps.longitude}`),
         api.get('/driver/requests'),
         api.get(`/facilities?latitude=${currentGps.latitude}&longitude=${currentGps.longitude}`),
       ]);
 
-      if (batchesRes.data?.success) {
-        setAvailableBatches(batchesRes.data.data);
+      if (batchesRes.status === 'fulfilled' && batchesRes.value?.data?.success) {
+        setAvailableBatches(batchesRes.value.data.data);
       }
-      if (reqsRes.data?.success) {
-        setMyRequests(reqsRes.data.data);
+      if (reqsRes.status === 'fulfilled' && reqsRes.value?.data?.success) {
+        setMyRequests(reqsRes.value.data.data);
       }
-      if (facRes.data?.success) {
-        setDisposalFacilities(facRes.data.data);
+      if (facRes.status === 'fulfilled' && facRes.value?.data?.success) {
+        setDisposalFacilities(facRes.value.data.data);
       }
+
+      // Cross-tab synchronization fallback
+      try {
+        const storedBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+        if (storedBatches.length > 0) {
+          setAvailableBatches((prev) => {
+            const combined = [...prev, ...storedBatches];
+            return combined.filter((b, idx, self) => idx === self.findIndex((t) => t.batchId === b.batchId));
+          });
+        }
+        const storedReqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+        if (storedReqs.length > 0) {
+          setMyRequests((prev) => {
+            const combined = [...prev, ...storedReqs];
+            return combined.filter((r, idx, self) => idx === self.findIndex((t) => (t.requestId || t.batchId) === (r.requestId || r.batchId)));
+          });
+        }
+      } catch (e) {}
     } catch (err) {
       console.warn('Driver fetch notice:', err);
     } finally {
@@ -116,11 +134,16 @@ const DriverDashboardPage = () => {
     }
   };
 
-  // Initial Fetch + Fast Polling (2 seconds) + Real-Time Socket Updates
+  // Initial Fetch + Fast Polling (2 seconds) + Cross-tab Storage Listener + Socket
   useEffect(() => {
     fetchDriverData();
     const interval = setInterval(fetchDriverData, 2000);
-    return () => clearInterval(interval);
+    const handleStorage = () => fetchDriverData();
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [user]);
 
   // Real-time socket listener for incoming hospital pickup requests

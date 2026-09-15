@@ -70,8 +70,10 @@ function App() {
         <Route path="/hospital/dashboard" element={<HospitalDashboard />} />
 
         {/* Driver Portal, Register, Login, Dashboard & QR Scanner */}
+        <Route path="/driver-portal" element={<Navigate to="/driver/dashboard" replace />} />
+        <Route path="/driver/portal" element={<Navigate to="/driver/dashboard" replace />} />
         <Route
-          path="/driver-portal"
+          path="/driver/portal-info"
           element={
             <>
               <Navbar />
