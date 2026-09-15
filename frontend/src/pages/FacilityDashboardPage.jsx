@@ -93,9 +93,51 @@ const FacilityDashboardPage = () => {
             return prev;
           });
         }
-        setDeposits(data.data.deposits || []);
+        // Merge API deposits with local deposits and any completed driver requests
+        const apiDeposits = data.data.deposits || [];
+        let localDeposits = [];
+        let localRequests = [];
+        try {
+          localDeposits = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
+          localRequests = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+        } catch (e) {}
+
+        const completedFromRequests = localRequests
+          .filter((r) => ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'].includes(r.status))
+          .map((r) => ({
+            orderId: r.requestId || r.orderId,
+            requestId: r.requestId || r.orderId,
+            batchId: r.batchId,
+            hospitalName: r.hospitalName || r.acceptedHospitalName || 'Gandhi Hospital',
+            driverName: r.driverName || 'Venkatesh Rao',
+            driverPhone: r.driverPhone || '9848123456',
+            vehicleNumber: r.vehicleNumber || 'TS-09-UB-4501',
+            wasteCategory: r.wasteCategory || 'YELLOW',
+            wasteQuantity: r.wasteQuantity || 45.0,
+            status: 'COMPLETED',
+            disposedAt: r.disposedAt || r.completedAt || new Date().toISOString(),
+            disposalFacilityId: r.disposalFacilityId || targetId,
+          }));
+
+        const combined = [...apiDeposits, ...localDeposits, ...completedFromRequests];
+        const unique = [];
+        const seen = new Set();
+        for (const item of combined) {
+          const key = item.orderId || item.requestId || item.batchId || item._id;
+          if (key && !seen.has(key)) {
+            seen.add(key);
+            unique.push(item);
+          }
+        }
+
+        setDeposits(unique);
         setIncomingVehicles(data.data.incomingVehicles || []);
-        setStats(data.data.stats || stats);
+        const totalWeight = unique.reduce((sum, d) => sum + (Number(d.wasteQuantity) || Number(d.quantityKg) || 0), 0);
+        setStats({
+          ...(data.data.stats || stats),
+          totalBatchesTreated: unique.length,
+          totalWeightKg: totalWeight > 0 ? totalWeight : (data.data.stats?.totalWeightKg || 0),
+        });
       }
     } catch (err) {
       console.warn('Facility dashboard fetch notice:', err);
@@ -113,6 +155,17 @@ const FacilityDashboardPage = () => {
     return () => clearInterval(pollInterval);
   }, [activeFacilityId]);
 
+  // Real-time cross-tab storage listener so driver scans in another tab reflect instantly
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (!e.key || e.key === 'biowaste_facility_deposits' || e.key === 'biowaste_driver_requests') {
+        fetchFacilityData(activeFacilityId, false);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [activeFacilityId]);
+
   // Real-time Socket.IO subscriptions for this facility
   useEffect(() => {
     if (!socket) return;
@@ -127,16 +180,33 @@ const FacilityDashboardPage = () => {
       setLatestIntakeAlert(intake);
       confetti({ particleCount: 150, spread: 90, origin: { y: 0.5 } });
       showToast(
-        `✓ INTAKE VERIFIED: Driver ${intake.driverName} (${intake.vehicleNumber}) deposited ${intake.wasteQuantity} kg ${intake.wasteCategory} from ${intake.hospitalName}!`,
+        `✓ INTAKE VERIFIED: Driver ${intake.driverName || 'Venkatesh Rao'} (${intake.vehicleNumber || 'TS-09-UB-4501'}) deposited ${intake.wasteQuantity || 45} kg ${intake.wasteCategory || 'YELLOW'} from ${intake.hospitalName || 'Gandhi Hospital'}!`,
         'success',
         'Waste Deposited'
       );
+
       // Prepend to deposits log
-      setDeposits((prev) => [intake, ...prev]);
+      setDeposits((prev) => {
+        const key = intake.orderId || intake.requestId || intake.batchId;
+        if (prev.some((d) => (d.orderId || d.requestId || d.batchId) === key)) {
+          return prev;
+        }
+        return [intake, ...prev];
+      });
+
+      // Persist in localStorage so it stays across page refreshes
+      try {
+        const stored = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
+        const key = intake.orderId || intake.requestId || intake.batchId;
+        if (!stored.some((d) => (d.orderId || d.requestId || d.batchId) === key)) {
+          localStorage.setItem('biowaste_facility_deposits', JSON.stringify([intake, ...stored]));
+        }
+      } catch (e) {}
+
       setStats((prev) => ({
         ...prev,
         totalBatchesTreated: prev.totalBatchesTreated + 1,
-        totalWeightKg: prev.totalWeightKg + (intake.wasteQuantity || 0),
+        totalWeightKg: prev.totalWeightKg + (Number(intake.wasteQuantity) || 45),
       }));
     };
 
@@ -650,7 +720,7 @@ const FacilityDashboardPage = () => {
                   </thead>
                   <tbody className="divide-y divide-orange-100 font-medium text-slate-700">
                     {deposits.map((dep, idx) => (
-                      <tr key={dep.orderId || dep.batchId || idx} className="hover:bg-orange-50/40 transition-colors">
+                      <tr key={dep.orderId || dep.requestId || dep.batchId || idx} className="hover:bg-orange-50/40 transition-colors">
                         <td className="py-3 px-3">
                           <strong className="text-slate-900 block">{dep.driverName || 'Venkatesh Rao'}</strong>
                           <span className="text-[10px] text-slate-500 font-mono">
@@ -675,6 +745,9 @@ const FacilityDashboardPage = () => {
                         <td className="py-3 px-3">
                           <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1 shadow-xs">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Incinerated
+                          </span>
+                          <span className="block text-[9px] text-slate-400 font-mono mt-0.5">
+                            {dep.disposedAt ? new Date(dep.disposedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Logged'}
                           </span>
                         </td>
                       </tr>

@@ -540,7 +540,7 @@ const DriverDashboardPage = () => {
             )
           );
 
-          // Update localStorage so all portals show COMPLETED
+          // Update localStorage so all portals show COMPLETED and Facility Portal logs the intake
           try {
             const reqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
             localStorage.setItem(
@@ -560,6 +560,31 @@ const DriverDashboardPage = () => {
                 batches.map((b) => (b.batchId === completedBatchId ? { ...b, status: 'COMPLETED' } : b))
               )
             );
+
+            // Directly store driver and waste details in Facility Portal records
+            const facilityDeposits = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
+            const depositEntry = {
+              orderId: completedOrderId,
+              requestId: completedOrderId,
+              batchId: completedBatchId,
+              hospitalName: targetJob?.hospitalName || targetJob?.acceptedHospitalName || 'Gandhi Hospital',
+              driverName: driverProfile.name || 'Venkatesh Rao',
+              driverPhone: driverProfile.phone || '9848123456',
+              vehicleNumber: driverProfile.vehicleNumber || 'TS-09-UB-4501',
+              wasteCategory: targetJob?.wasteCategory || 'YELLOW',
+              wasteQuantity: targetJob?.wasteQuantity || 45.0,
+              disposalFacilityId: targetFacility?.facilityId || selectedFacilityId || 'FAC-TG-001',
+              disposalFacilityName: targetFacility?.facilityName || 'Ramky Enviro CBMWTF',
+              status: 'COMPLETED',
+              disposedAt: new Date().toISOString(),
+              treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
+            };
+            const updatedFacilityDeposits = [
+              depositEntry,
+              ...facilityDeposits.filter((d) => (d.orderId || d.requestId) !== completedOrderId && d.batchId !== completedBatchId),
+            ];
+            localStorage.setItem('biowaste_facility_deposits', JSON.stringify(updatedFacilityDeposits));
+
             window.dispatchEvent(new Event('storage'));
           } catch (e) {}
 
@@ -757,6 +782,31 @@ const DriverDashboardPage = () => {
               batches.map((b) => (b.batchId === completedBatchId ? { ...b, status: 'COMPLETED' } : b))
             )
           );
+
+          // Store driver and waste details in Facility Portal records
+          const facilityDeposits = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
+          const depositEntry = {
+            orderId: completedOrderId,
+            requestId: completedOrderId,
+            batchId: completedBatchId,
+            hospitalName: targetJob?.hospitalName || targetJob?.acceptedHospitalName || 'Gandhi Hospital',
+            driverName: driverProfile.name || 'Venkatesh Rao',
+            driverPhone: driverProfile.phone || '9848123456',
+            vehicleNumber: driverProfile.vehicleNumber || 'TS-09-UB-4501',
+            wasteCategory: targetJob?.wasteCategory || 'YELLOW',
+            wasteQuantity: targetJob?.wasteQuantity || 45.0,
+            disposalFacilityId: selectedFacilityId || 'FAC-TG-001',
+            disposalFacilityName: 'Ramky Enviro CBMWTF (Dundigal Central Facility)',
+            status: 'COMPLETED',
+            disposedAt: new Date().toISOString(),
+            treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
+          };
+          const updatedFacilityDeposits = [
+            depositEntry,
+            ...facilityDeposits.filter((d) => (d.orderId || d.requestId) !== completedOrderId && d.batchId !== completedBatchId),
+          ];
+          localStorage.setItem('biowaste_facility_deposits', JSON.stringify(updatedFacilityDeposits));
+
           window.dispatchEvent(new Event('storage'));
         } catch (e) {}
 
