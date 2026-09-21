@@ -29,6 +29,7 @@ import {
   FlipHorizontal,
   Lightbulb,
   Upload,
+  Navigation,
 } from 'lucide-react';
 
 const ALL_10_FACILITIES = [

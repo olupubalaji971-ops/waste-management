@@ -39,6 +39,7 @@ import {
   Moon,
   Globe,
   ChevronDown,
+  ArrowRight,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
