@@ -76,10 +76,65 @@ const FacilityDashboardPage = () => {
   const [latestIntakeAlert, setLatestIntakeAlert] = useState(null);
 
   // Fetch facility dashboard data
-  const fetchFacilityData = async (facilityId, isInitial = false) => {
+  const fetchFacilityData = async (facilityId = activeFacilityId, isInitial = false) => {
+    const targetId = facilityId || activeFacilityId;
+
+    // 1. Immediately read local storage deposits so they render instantly
+    let localDeposits = [];
+    let localRequests = [];
+    try {
+      localDeposits = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
+      localRequests = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+    } catch (e) {}
+
+    const completedFromRequests = localRequests
+      .filter(
+        (r) =>
+          ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'].includes(r.status) &&
+          (r.disposalFacilityId === targetId || r.facilityId === targetId)
+      )
+      .map((r) => ({
+        orderId: r.requestId || r.orderId,
+        requestId: r.requestId || r.orderId,
+        batchId: r.batchId,
+        hospitalName: r.hospitalName || r.acceptedHospitalName || 'Gandhi Hospital',
+        driverName: r.driverName || 'Venkatesh Rao',
+        driverPhone: r.driverPhone || '9848123456',
+        vehicleNumber: r.vehicleNumber || 'TS-09-UB-4501',
+        wasteCategory: r.wasteCategory || 'YELLOW',
+        wasteQuantity: r.wasteQuantity || 45.0,
+        status: 'COMPLETED',
+        disposedAt: r.disposedAt || r.completedAt || new Date().toISOString(),
+        disposalFacilityId: r.disposalFacilityId || targetId,
+      }));
+
+    const filteredLocalDeposits = localDeposits.filter(
+      (d) => (d.disposalFacilityId === targetId || d.facilityId === targetId)
+    );
+
+    const initialCombined = [...filteredLocalDeposits, ...completedFromRequests];
+    if (initialCombined.length > 0) {
+      const initialUnique = [];
+      const seen = new Set();
+      for (const item of initialCombined) {
+        const key = item.orderId || item.requestId || item.batchId || item._id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          initialUnique.push(item);
+        }
+      }
+      initialUnique.sort((a, b) => new Date(b.disposedAt || b.completedAt || b.timestamp || 0) - new Date(a.disposedAt || a.completedAt || a.timestamp || 0));
+      setDeposits(initialUnique);
+      const totalWeight = initialUnique.reduce((sum, d) => sum + (Number(d.wasteQuantity) || Number(d.quantityKg) || 0), 0);
+      setStats((prev) => ({
+        ...prev,
+        totalBatchesTreated: initialUnique.length,
+        totalWeightKg: totalWeight > 0 ? parseFloat(totalWeight.toFixed(1)) : prev.totalWeightKg,
+      }));
+    }
+
     try {
       if (isInitial) setLoading(true);
-      const targetId = facilityId || activeFacilityId;
       const res = await api.get(`/facility/dashboard?facilityId=${targetId}`);
       const data = res.data;
 
@@ -96,39 +151,6 @@ const FacilityDashboardPage = () => {
         }
         // Merge API deposits with local deposits and any completed driver requests
         const apiDeposits = data.data.deposits || [];
-        let localDeposits = [];
-        let localRequests = [];
-        try {
-          localDeposits = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
-          localRequests = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
-        } catch (e) {}
-
-        const completedFromRequests = localRequests
-          .filter(
-            (r) =>
-              ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'].includes(r.status) &&
-              (r.disposalFacilityId === targetId || r.facilityId === targetId)
-          )
-          .map((r) => ({
-            orderId: r.requestId || r.orderId,
-            requestId: r.requestId || r.orderId,
-            batchId: r.batchId,
-            hospitalName: r.hospitalName || r.acceptedHospitalName || 'Gandhi Hospital',
-            driverName: r.driverName || 'Venkatesh Rao',
-            driverPhone: r.driverPhone || '9848123456',
-            vehicleNumber: r.vehicleNumber || 'TS-09-UB-4501',
-            wasteCategory: r.wasteCategory || 'YELLOW',
-            wasteQuantity: r.wasteQuantity || 45.0,
-            status: 'COMPLETED',
-            disposedAt: r.disposedAt || r.completedAt || new Date().toISOString(),
-            disposalFacilityId: r.disposalFacilityId || targetId,
-          }));
-
-        // Filter localDeposits strictly for this facility targetId
-        const filteredLocalDeposits = localDeposits.filter(
-          (d) => (d.disposalFacilityId === targetId || d.facilityId === targetId)
-        );
-
         const combined = [...filteredLocalDeposits, ...completedFromRequests, ...apiDeposits];
         const unique = [];
         const seen = new Set();
@@ -175,6 +197,18 @@ const FacilityDashboardPage = () => {
     };
     const handleCustomDeposit = (e) => {
       if (!e.detail || e.detail.disposalFacilityId === activeFacilityId) {
+        if (e.detail) {
+          setDeposits((prev) => {
+            const key = e.detail.orderId || e.detail.requestId || e.detail.batchId;
+            if (prev.some((d) => (d.orderId || d.requestId || d.batchId) === key)) return prev;
+            return [e.detail, ...prev];
+          });
+          setStats((prev) => ({
+            ...prev,
+            totalBatchesTreated: prev.totalBatchesTreated + 1,
+            totalWeightKg: parseFloat((prev.totalWeightKg + Number(e.detail.wasteQuantity || 45)).toFixed(1)),
+          }));
+        }
         fetchFacilityData(activeFacilityId, false);
       }
     };
@@ -289,103 +323,6 @@ const FacilityDashboardPage = () => {
       showToast('Failed to rotate QR code', 'error');
     } finally {
       setIsRotatingQR(false);
-    }
-  };
-
-  // Instant Driver QR Gate Scan for this exact facility
-  const handleSimulateDriverScan = async () => {
-    try {
-      const now = new Date();
-      const currentMeta = ALL_10_FACILITIES.find((f) => f.id === activeFacilityId) || ALL_10_FACILITIES[0];
-      const targetOrderId = `REQ-${Math.floor(100000 + Math.random() * 900000)}`;
-      const targetBatchId = `BWS-TEL-${Math.floor(1000 + Math.random() * 9000)}`;
-      const randomQty = parseFloat((35 + Math.random() * 25).toFixed(1));
-      const categories = ['YELLOW', 'RED', 'WHITE', 'BLUE'];
-      const randomCat = categories[Math.floor(Math.random() * categories.length)];
-      const hospitals = [
-        'Gandhi Hospital, Secunderabad',
-        'Osmania General Hospital, Afzal Gunj',
-        'NIMS (Nizam\'s Institute of Medical Sciences), Punjagutta',
-        'Apollo Hospitals, Jubilee Hills',
-        'Yashoda Hospitals, Secunderabad',
-      ];
-      const randomHosp = hospitals[Math.floor(Math.random() * hospitals.length)];
-
-      let simulatedIntake = null;
-      try {
-        const res = await api.post('/facility/simulate-driver-scan', { facilityId: activeFacilityId });
-        if (res.data?.success && res.data.data?.intake) {
-          simulatedIntake = res.data.data.intake;
-          if (res.data.data.refreshedQR) {
-            setQrPayload(res.data.data.refreshedQR);
-          }
-        }
-      } catch (serverErr) {
-        console.warn('Server simulation notice:', serverErr?.message);
-      }
-
-      const depositEntry = simulatedIntake || {
-        orderId: targetOrderId,
-        requestId: targetOrderId,
-        batchId: targetBatchId,
-        hospitalName: randomHosp,
-        hospitalId: 'HOSP-TG-001',
-        driverName: 'Kiran Kumar (TS Bio-Carrier)',
-        driverPhone: '+91 98480 22338',
-        vehicleNumber: 'TS-09-UB-4501',
-        wasteCategory: randomCat,
-        wasteQuantity: randomQty,
-        disposalFacilityId: activeFacilityId,
-        disposalFacilityName: currentMeta.name,
-        status: 'COMPLETED',
-        disposedAt: now.toISOString(),
-        treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
-      };
-
-      // Persist in localStorage
-      try {
-        const stored = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
-        const updated = [
-          depositEntry,
-          ...stored.filter((d) => (d.orderId || d.requestId) !== depositEntry.orderId && d.batchId !== depositEntry.batchId),
-        ];
-        localStorage.setItem('biowaste_facility_deposits', JSON.stringify(updated));
-      } catch (e) {}
-
-      // Update local state
-      setDeposits((prev) => [
-        depositEntry,
-        ...prev.filter((d) => (d.orderId || d.requestId) !== depositEntry.orderId && d.batchId !== depositEntry.batchId),
-      ]);
-
-      setStats((prev) => ({
-        ...prev,
-        totalBatchesTreated: prev.totalBatchesTreated + 1,
-        totalWeightKg: parseFloat((prev.totalWeightKg + Number(depositEntry.wasteQuantity || randomQty)).toFixed(1)),
-      }));
-
-      // Rotate QR
-      setQrPayload((prev) => ({
-        type: 'DISPOSAL_FACILITY',
-        facilityId: activeFacilityId,
-        facilityName: currentMeta.name,
-        version: (prev?.version || 1) + 1,
-        token: `FAC_${activeFacilityId}_TOK_${Date.now().toString(36).toUpperCase()}`,
-        geofenceRadiusMeters: 500,
-      }));
-
-      confetti({ particleCount: 160, spread: 90, origin: { y: 0.5 } });
-      showToast(
-        `✓ DRIVER SCAN VERIFIED: Driver ${depositEntry.driverName} (${depositEntry.vehicleNumber}) deposited ${depositEntry.wasteQuantity} kg from ${depositEntry.hospitalName}!`,
-        'success',
-        'Gate QR Scanned'
-      );
-
-      // Broadcast storage and custom event
-      window.dispatchEvent(new Event('storage'));
-      window.dispatchEvent(new CustomEvent('facility_deposit_recorded', { detail: depositEntry }));
-    } catch (err) {
-      showToast('Could not record driver scan', 'error');
     }
   };
 
@@ -852,33 +789,9 @@ const FacilityDashboardPage = () => {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Instant Driver Gate Scan Simulation Button */}
-                <button
-                  type="button"
-                  onClick={handleSimulateDriverScan}
-                  className="flex items-center gap-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 active:scale-95 text-white font-black text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
-                  title={`Simulate instant driver gate scan for ${currentFacility.name}`}
-                >
-                  <Truck className="w-3.5 h-3.5 text-orange-200" />
-                  <span>Simulate Driver Gate Scan</span>
-                </button>
-
-                <a
-                  href="/driver/scan-qr"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 text-orange-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-orange-200 transition-colors"
-                  title="Open Camera Driver Scanner in New Tab"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  <span className="hidden md:inline">Driver Scanner</span>
-                </a>
-
-                <span className="text-xs font-mono font-bold text-orange-800 bg-orange-50 px-3 py-1 rounded-xl border border-orange-200">
-                  {deposits.length} Records
-                </span>
-              </div>
+              <span className="text-xs font-mono font-bold text-orange-800 bg-orange-50 px-3 py-1 rounded-xl border border-orange-200">
+                {deposits.length} Records
+              </span>
             </div>
 
             {/* Deposits Log Table */}
@@ -895,14 +808,6 @@ const FacilityDashboardPage = () => {
                     When a driver transports biomedical waste from a hospital and scans this facility's gate QR, all driver & batch details will appear here instantly.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSimulateDriverScan}
-                  className="inline-flex items-center gap-2 bg-white hover:bg-orange-50 text-orange-700 border border-orange-300 font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-                >
-                  <Truck className="w-4 h-4 text-orange-600" />
-                  <span>Test Driver Scan Now</span>
-                </button>
               </div>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-orange-200/80 shadow-xs">

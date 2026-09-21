@@ -113,11 +113,16 @@ const DriverDashboardPage = () => {
         api.get(`/facilities?latitude=${currentGps.latitude}&longitude=${currentGps.longitude}`),
       ]);
 
+      let declinedIds = [];
+      try {
+        declinedIds = JSON.parse(localStorage.getItem('biowaste_declined_requests') || '[]');
+      } catch (e) {}
+
       if (batchesRes.status === 'fulfilled' && batchesRes.value?.data?.success) {
-        setAvailableBatches(batchesRes.value.data.data);
+        setAvailableBatches(batchesRes.value.data.data.filter((b) => !declinedIds.includes(b.batchId)));
       }
       if (reqsRes.status === 'fulfilled' && reqsRes.value?.data?.success) {
-        setMyRequests(reqsRes.value.data.data);
+        setMyRequests(reqsRes.value.data.data.filter((r) => !declinedIds.includes(r.batchId) && !declinedIds.includes(r.requestId)));
       }
       if (facRes.status === 'fulfilled' && facRes.value?.data?.success) {
         setDisposalFacilities(facRes.value.data.data);
@@ -128,14 +133,14 @@ const DriverDashboardPage = () => {
         const storedBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
         if (storedBatches.length > 0) {
           setAvailableBatches((prev) => {
-            const combined = [...prev, ...storedBatches];
+            const combined = [...prev, ...storedBatches].filter((b) => !declinedIds.includes(b.batchId));
             return combined.filter((b, idx, self) => idx === self.findIndex((t) => t.batchId === b.batchId));
           });
         }
         const storedReqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
         if (storedReqs.length > 0) {
           setMyRequests((prev) => {
-            const combined = [...prev, ...storedReqs];
+            const combined = [...prev, ...storedReqs].filter((r) => !declinedIds.includes(r.batchId) && !declinedIds.includes(r.requestId));
             return combined.filter((r, idx, self) => idx === self.findIndex((t) => (t.requestId || t.batchId) === (r.requestId || r.batchId)));
           });
         }
@@ -192,27 +197,47 @@ const DriverDashboardPage = () => {
     ].includes(r.status)
   ) || myRequests[0];
 
-  // Incoming hospital pickup requests awaiting driver acceptance (Combine both batches and requests)
-  const incomingRequests = [
-    ...availableBatches.filter((b) => ['REQUESTED', 'ACTIVE', 'GENERATED', 'PENDING'].includes(b.status)),
-    ...myRequests
-      .filter((r) => ['REQUESTED', 'PENDING'].includes(r.status))
-      .map((r) => ({
-        batchId: r.batchId,
-        hospitalName: r.hospitalName,
-        hospitalId: r.hospitalId,
-        category: r.wasteCategory || 'YELLOW',
-        quantityKg: r.wasteQuantity || 45.0,
-        quantity: r.wasteQuantity || 45.0,
-        date: r.requestedAt ? new Date(r.requestedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        time: r.requestedAt ? new Date(r.requestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-        status: r.status,
-        requestId: r.requestId,
-        pickupLocation: r.pickupLocation,
-        hospitalAddress: r.hospitalAddress || r.pickupLocation,
-        isRequestedByHospital: true,
-      })),
-  ].filter((item, index, self) => index === self.findIndex((t) => t.batchId === item.batchId));
+  // Check if driver has an active working trip (locks driver to 1 hospital journey)
+  const hasActiveAcceptedTrip = activeJob && [
+    'ACCEPTED',
+    'DRIVER_ACCEPTED',
+    'TRAVELLING_TO_HOSPITAL',
+    'ARRIVED_AT_HOSPITAL',
+    'QR_VERIFIED',
+    'WASTE_COLLECTED',
+    'IN_TRANSIT',
+    'ARRIVED_AT_DISPOSAL_FACILITY',
+    'DISPOSAL_QR_VERIFIED',
+  ].includes(activeJob.status);
+
+  let currentDeclinedIds = [];
+  try {
+    currentDeclinedIds = JSON.parse(localStorage.getItem('biowaste_declined_requests') || '[]');
+  } catch (e) {}
+
+  // Incoming hospital pickup requests awaiting driver acceptance (Exclusive: none if trip is currently active)
+  const incomingRequests = hasActiveAcceptedTrip
+    ? []
+    : [
+        ...availableBatches.filter((b) => ['REQUESTED', 'ACTIVE', 'GENERATED', 'PENDING'].includes(b.status) && !currentDeclinedIds.includes(b.batchId)),
+        ...myRequests
+          .filter((r) => ['REQUESTED', 'PENDING'].includes(r.status) && !currentDeclinedIds.includes(r.batchId) && !currentDeclinedIds.includes(r.requestId))
+          .map((r) => ({
+            batchId: r.batchId,
+            hospitalName: r.hospitalName,
+            hospitalId: r.hospitalId,
+            category: r.wasteCategory || 'YELLOW',
+            quantityKg: r.wasteQuantity || 45.0,
+            quantity: r.wasteQuantity || 45.0,
+            date: r.requestedAt ? new Date(r.requestedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            time: r.requestedAt ? new Date(r.requestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+            status: r.status,
+            requestId: r.requestId,
+            pickupLocation: r.pickupLocation,
+            hospitalAddress: r.hospitalAddress || r.pickupLocation,
+            isRequestedByHospital: true,
+          })),
+      ].filter((item, index, self) => index === self.findIndex((t) => t.batchId === item.batchId));
 
   // Join Socket.io order room for active job
   useEffect(() => {
@@ -280,74 +305,148 @@ const DriverDashboardPage = () => {
     };
   }, [activeJob?.status, activeJob?.requestId, disposalFacilities, selectedFacilityId]);
 
-  // Driver Accepts an Incoming Hospital Pickup Request
+  // Driver Accepts an Incoming Hospital Pickup Request (Exclusive: accepts 1, automatically declines all other hospitals)
   const handleAcceptPickup = async (batchIdOrRequestId, hospitalName) => {
     setActionLoading(true);
+
+    const acceptedItem = myRequests.find((r) => r.batchId === batchIdOrRequestId || r.requestId === batchIdOrRequestId)
+      || availableBatches.find((b) => b.batchId === batchIdOrRequestId || b.requestId === batchIdOrRequestId)
+      || {
+        requestId: `REQ-${Date.now().toString().slice(-6)}`,
+        batchId: batchIdOrRequestId,
+        hospitalName: hospitalName || 'Government General Hospital Nizamabad',
+        wasteCategory: 'YELLOW',
+        wasteQuantity: 45.0,
+      };
+
+    const targetOrderId = acceptedItem.requestId || `REQ-${Date.now().toString().slice(-6)}`;
+    const targetBatchId = acceptedItem.batchId || batchIdOrRequestId;
+    const targetHospName = hospitalName || acceptedItem.hospitalName || 'Government General Hospital Nizamabad';
+    const targetCategory = acceptedItem.wasteCategory || acceptedItem.category || 'YELLOW';
+    const targetQty = Number(acceptedItem.wasteQuantity || acceptedItem.quantityKg || acceptedItem.quantity || 45);
+
+    const acceptedJob = {
+      ...acceptedItem,
+      requestId: targetOrderId,
+      batchId: targetBatchId,
+      hospitalName: targetHospName,
+      wasteCategory: targetCategory,
+      wasteQuantity: targetQty,
+      status: 'DRIVER_ACCEPTED',
+      driverName: driverProfile.name,
+      driverPhone: driverProfile.phone,
+      vehicleNumber: driverProfile.vehicleNumber,
+      acceptedAt: new Date().toISOString(),
+    };
+
+    // Collect all other incoming batch IDs to automatically decline them
+    const otherPendingIds = [];
+    myRequests.forEach((r) => {
+      const isThis = r.batchId === targetBatchId || r.requestId === targetOrderId;
+      if (!isThis && ['REQUESTED', 'PENDING', 'ACTIVE'].includes(r.status)) {
+        if (r.batchId) otherPendingIds.push(r.batchId);
+        if (r.requestId) otherPendingIds.push(r.requestId);
+      }
+    });
+    availableBatches.forEach((b) => {
+      const isThis = b.batchId === targetBatchId || b.requestId === targetOrderId;
+      if (!isThis && ['REQUESTED', 'PENDING', 'ACTIVE', 'GENERATED'].includes(b.status)) {
+        if (b.batchId) otherPendingIds.push(b.batchId);
+      }
+    });
+
     try {
-      const res = await api.post(`/driver/accept-pickup/${batchIdOrRequestId}`, {
+      // Save other request IDs to declined list so they never re-appear
+      const currentDeclined = JSON.parse(localStorage.getItem('biowaste_declined_requests') || '[]');
+      const updatedDeclined = Array.from(new Set([...currentDeclined, ...otherPendingIds]));
+      localStorage.setItem('biowaste_declined_requests', JSON.stringify(updatedDeclined));
+
+      // Update biowaste_driver_requests in localStorage: keep completed history + acceptedJob, remove declined
+      const storedReqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+      const updatedReqs = [
+        acceptedJob,
+        ...storedReqs
+          .filter((r) => r.batchId !== targetBatchId && r.requestId !== targetOrderId)
+          .filter((r) => !['REQUESTED', 'PENDING'].includes(r.status)),
+      ];
+      localStorage.setItem('biowaste_driver_requests', JSON.stringify(updatedReqs));
+
+      // Update biowaste_hospital_batches in localStorage
+      const storedBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+      const updatedBatches = storedBatches.map((b) =>
+        b.batchId === targetBatchId ? { ...b, status: 'DRIVER_ACCEPTED', assignedDriver: driverProfile.name } : { ...b, status: 'DECLINED' }
+      );
+      localStorage.setItem('biowaste_hospital_batches', JSON.stringify(updatedBatches));
+
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
+    // Immediately clear all other batches in React state
+    setAvailableBatches([]);
+    setMyRequests((prev) => [
+      acceptedJob,
+      ...prev.filter((r) => r.batchId !== targetBatchId && r.requestId !== targetOrderId && !['REQUESTED', 'PENDING'].includes(r.status)),
+    ]);
+
+    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+    showToast(
+      `✓ Accepted ${targetHospName}! Other hospital requests have been automatically declined.`,
+      'success',
+      'Exclusive Pickup Confirmed'
+    );
+
+    // Call backend API in background
+    try {
+      await api.post(`/driver/accept-pickup/${batchIdOrRequestId}`, {
         driverId: driverProfile.driverId,
         driverName: driverProfile.name,
         driverPhone: driverProfile.phone,
         vehicleNumber: driverProfile.vehicleNumber,
       });
-      if (res.data?.success) {
-        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
-        showToast(
-          `Pickup accepted for ${hospitalName}! You are authorized to proceed to hospital and scan QR code.`,
-          'success',
-          'Pickup Accepted'
-        );
-        await fetchDriverData();
-        return;
-      }
-    } catch (err) {
-      console.warn('Backend accept pickup notice:', err?.message);
-      // Resilient local state transition
-      setMyRequests((prev) => {
-        const found = prev.find((r) => r.batchId === batchIdOrRequestId || r.requestId === batchIdOrRequestId);
-        if (found) {
-          return prev.map((r) =>
-            r.batchId === batchIdOrRequestId || r.requestId === batchIdOrRequestId
-              ? { ...r, status: 'DRIVER_ACCEPTED', driverName: driverProfile.name }
-              : r
-          );
-        }
-        return [
-          {
-            requestId: `REQ-${Date.now().toString().slice(-6)}`,
-            batchId: batchIdOrRequestId,
-            hospitalName: hospitalName || 'Gandhi Hospital',
-            driverName: driverProfile.name,
-            vehicleNumber: driverProfile.vehicleNumber,
-            status: 'DRIVER_ACCEPTED',
-          },
-          ...prev,
-        ];
-      });
-      setAvailableBatches((prev) =>
-        prev.map((b) => (b.batchId === batchIdOrRequestId ? { ...b, status: 'DRIVER_ACCEPTED' } : b))
-      );
-      confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
-      showToast(
-        `Pickup accepted for ${hospitalName}! You are authorized to proceed to hospital and scan QR code.`,
-        'success',
-        'Pickup Accepted'
-      );
-    } finally {
-      setActionLoading(false);
-    }
+    } catch (err) {}
+
+    setActionLoading(false);
   };
 
-  // Driver Declines / Rejects an Incoming Request
-  const handleDeclinePickup = async (requestId) => {
+  // Driver Declines / Rejects an Incoming Request (Working Decline Button)
+  const handleDeclinePickup = async (batchIdOrRequestId) => {
+    // 1. Immediately remove from availableBatches and myRequests in React state
+    setAvailableBatches((prev) =>
+      prev.filter((b) => b.batchId !== batchIdOrRequestId && b.requestId !== batchIdOrRequestId)
+    );
+    setMyRequests((prev) =>
+      prev.filter((r) => r.batchId !== batchIdOrRequestId && r.requestId !== batchIdOrRequestId)
+    );
+
+    // 2. Persist in localStorage and track in biowaste_declined_requests
     try {
-      await api.put(`/hospital/requests/${requestId}/reject`);
-      showToast('Pickup request declined.', 'info', 'Declined');
-      await fetchDriverData();
-    } catch (err) {
-      // Refresh
-      await fetchDriverData();
-    }
+      const declinedList = JSON.parse(localStorage.getItem('biowaste_declined_requests') || '[]');
+      if (!declinedList.includes(batchIdOrRequestId)) {
+        declinedList.push(batchIdOrRequestId);
+        localStorage.setItem('biowaste_declined_requests', JSON.stringify(declinedList));
+      }
+
+      const storedReqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+      const filteredReqs = storedReqs.filter(
+        (r) => r.batchId !== batchIdOrRequestId && r.requestId !== batchIdOrRequestId
+      );
+      localStorage.setItem('biowaste_driver_requests', JSON.stringify(filteredReqs));
+
+      const storedBatches = JSON.parse(localStorage.getItem('biowaste_hospital_batches') || '[]');
+      const filteredBatches = storedBatches.filter(
+        (b) => b.batchId !== batchIdOrRequestId
+      );
+      localStorage.setItem('biowaste_hospital_batches', JSON.stringify(filteredBatches));
+
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
+    showToast(`Pickup request ${batchIdOrRequestId} declined and removed.`, 'info', 'Declined');
+
+    // 3. Inform server in background
+    try {
+      await api.put(`/hospital/requests/${batchIdOrRequestId}/reject`);
+    } catch (err) {}
   };
 
   // Mark Driver Arrival at Hospital
@@ -1255,7 +1354,35 @@ const DriverDashboardPage = () => {
             </button>
           </div>
 
-          {incomingRequests.length === 0 ? (
+          {hasActiveAcceptedTrip ? (
+            <div className="p-6 bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50/60 rounded-2xl border border-orange-200 text-xs text-orange-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-600 text-white flex items-center justify-center font-black text-lg shrink-0 shadow-sm shadow-orange-500/20">
+                  ✓
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <strong className="text-sm font-black text-slate-900 block">
+                      Active Hospital Trip Locked: {activeJob.hospitalName}
+                    </strong>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      In Progress
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Manifest <span className="font-mono font-bold text-orange-900">{activeJob.batchId}</span> • All other incoming requests are automatically declined to maintain dedicated custody focus.
+                  </p>
+                </div>
+              </div>
+              <a
+                href="#workflow-console"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-xs transition-all shadow-xs self-start sm:self-auto shrink-0 flex items-center gap-1.5"
+              >
+                <span>Continue Workflow</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          ) : incomingRequests.length === 0 ? (
             <div className="p-8 text-center bg-orange-50/50 rounded-2xl border border-orange-200 text-xs text-slate-500 space-y-1">
               <p className="font-bold text-slate-800 text-sm">No pending hospital pickup requests right now.</p>
               <p>When a hospital creates a waste batch and clicks "Request Driver", their pickup request will appear here with Accept / Decline options.</p>
