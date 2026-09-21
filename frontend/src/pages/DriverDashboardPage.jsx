@@ -957,7 +957,7 @@ const DriverDashboardPage = () => {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-black text-sm sm:text-base tracking-tight text-slate-900">
-                BioWaste Smart
+                HealthTech Smart
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-200">
                 Driver Console

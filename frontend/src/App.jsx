@@ -22,6 +22,7 @@ import FacilityLoginPage from './pages/FacilityLoginPage';
 import FacilityDashboardPage from './pages/FacilityDashboardPage';
 
 import GoogleSheetsMirrorPage from './pages/GoogleSheetsMirrorPage';
+import LifelineBloodDashboard from './pages/LifelineBloodDashboard';
 
 // Role-Aware Dashboard Router (Dedicated Views)
 const DynamicDashboard = () => {
@@ -99,6 +100,11 @@ function App() {
         <Route path="/app/dashboard" element={<DynamicDashboard />} />
         <Route path="/app/google-sheets" element={<GoogleSheetsMirrorPage />} />
         <Route path="/app" element={<DynamicDashboard />} />
+
+        {/* Lifeline Emergency Blood & Bank Directory Dashboard */}
+        <Route path="/blood-network" element={<LifelineBloodDashboard />} />
+        <Route path="/lifeline-blood" element={<LifelineBloodDashboard />} />
+        <Route path="/blood-emergency" element={<LifelineBloodDashboard />} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />

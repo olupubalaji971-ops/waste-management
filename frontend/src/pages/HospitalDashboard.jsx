@@ -33,6 +33,7 @@ import {
   Send,
   Check,
   ChevronDown,
+  Heart,
 } from 'lucide-react';
 
 const HospitalDashboard = () => {
@@ -431,7 +432,7 @@ const HospitalDashboard = () => {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-black text-sm sm:text-base tracking-tight text-slate-900">
-                BioWaste Smart
+                HealthTech Smart
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300">
                 Hospital Command Portal
@@ -485,6 +486,19 @@ const HospitalDashboard = () => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Lifeline Blood Directory Trigger */}
+          <Link
+            to="/blood-network"
+            className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer active:scale-95 shadow-xs"
+            title="Open Lifeline Emergency Blood & Bank Directory"
+          >
+            <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500" />
+            <span className="hidden md:inline">Blood Network</span>
+            <span className="bg-rose-600 text-white text-[9px] px-1.5 py-0.2 rounded-full font-black animate-pulse">
+              LIVE
+            </span>
+          </Link>
+
           {/* Segregation Assistant Modal Trigger */}
           <button
             type="button"

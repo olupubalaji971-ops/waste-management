@@ -32,6 +32,7 @@ import {
   Radio,
   Flame,
   Factory,
+  Heart,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
@@ -107,6 +108,16 @@ const LandingPage = () => {
       badge: t('f6Badge', 'CPCB Authorized'),
       clickable: false,
     },
+    {
+      id: 'blood',
+      title: '7. Lifeline Blood & Bank Network',
+      desc: 'Real-time blood directory, emergency alerts, donor geolocation radar, bank stock inventory, and encrypted PII privacy vault.',
+      icon: Heart,
+      color: 'from-rose-600 to-red-500',
+      badge: 'Live Sync',
+      clickable: true,
+      link: '/blood-network',
+    },
   ];
 
   const activeCategoryData = bmwCategories[selectedBmwCategory] || bmwCategories.YELLOW;
@@ -122,11 +133,11 @@ const LandingPage = () => {
 
             {/* Main Title with Glowing Accent */}
             <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.08] drop-shadow-2xl">
-              BIOWASTE <span className="bg-gradient-to-r from-[#6ee7b7] via-[#a7f3d0] to-[#34d399] bg-clip-text text-transparent drop-shadow-lg">SMART</span>
+              HEALTHTECH <span className="bg-gradient-to-r from-[#6ee7b7] via-[#a7f3d0] to-[#34d399] bg-clip-text text-transparent drop-shadow-lg">SMART</span>
             </h1>
 
             <p className="text-lg sm:text-2xl font-black text-white max-w-3xl mx-auto leading-snug drop-shadow-md">
-              {t('heroTitle2', 'Smart Medical Waste Collection, Segregation & Real-Time Tracking Network')}
+              {t('heroTitle2', 'Smart Autonomous Medical, Waste & Emergency Health Network')}
             </p>
 
             <p className="text-sm sm:text-base text-blue-100 max-w-2xl mx-auto leading-relaxed drop-shadow-sm font-medium">
@@ -159,6 +170,12 @@ const LandingPage = () => {
               <Link to="/facility/login">
                 <ShinyButton variant="purple" size="lg" icon={Factory}>
                   <span>{t('facilityPortalBadge', 'FACILITIES PORTAL')}</span>
+                </ShinyButton>
+              </Link>
+
+              <Link to="/blood-network">
+                <ShinyButton variant="outline" size="lg" icon={Heart} className="border-rose-500/40 text-rose-300 hover:border-rose-400">
+                  <span className="text-rose-400 font-black">🩸 BLOOD NETWORK</span>
                 </ShinyButton>
               </Link>
             </div>
@@ -508,6 +525,8 @@ const LandingPage = () => {
                   onClick={() => {
                     if (f.id === 'segregation') {
                       setIsSegregationModalOpen(true);
+                    } else if (f.id === 'blood') {
+                      navigate('/blood-network');
                     } else if (f.id === 'sheets') {
                       navigate('/app/google-sheets');
                     } else if (f.id === 'facilities') {

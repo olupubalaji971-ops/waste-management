@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, Sparkles, Sun, Moon, Globe, ChevronDown, Check } from 'lucide-react';
+import { Leaf, Sparkles, Sun, Moon, Globe, ChevronDown, Check, Heart } from 'lucide-react';
 import SegregationAssistantModal from './SegregationAssistantModal';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -41,18 +41,32 @@ const Navbar = () => {
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="font-black text-xl tracking-tight text-slate-950 dark:text-white">
-                    BioWaste<span className="text-[#519755]">Smart</span>
+                    HealthTech<span className="text-[#519755]">Smart</span>
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-wide">
-                  {t('brandSubtitle', 'Autonomous Medical-Waste Network')}
+                  {t('brandSubtitle', 'Autonomous Medical & Health Emergency Network')}
                 </p>
               </div>
             </Link>
 
-            {/* Navigation Right: Language, Dark Mode & Segregation Guide */}
+            {/* Navigation Right: Blood Network, Language, Dark Mode & Segregation Guide */}
             <div className="flex items-center gap-2 sm:gap-3">
               
+              {/* Lifeline Emergency Blood Portal Button */}
+              <Link
+                to="/blood-network"
+                id="btn-nav-lifeline-blood"
+                className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/80 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer active:scale-95 group"
+                title="Lifeline Emergency Blood & Bank Directory"
+              >
+                <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Blood Network</span>
+                <span className="bg-rose-600 text-white text-[9px] px-1.5 py-0.2 rounded-full font-black animate-pulse">
+                  LIVE
+                </span>
+              </Link>
+
               {/* 1. Language Option: English / తెలుగు (Telugu) */}
               <div className="relative" ref={langDropdownRef}>
                 <button
