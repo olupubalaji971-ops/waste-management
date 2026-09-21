@@ -39,16 +39,6 @@ const DriverPortalPage = () => {
             <p className="text-sm text-slate-600 max-w-xl mx-auto leading-relaxed">
               Drivers can register, login, view hospitals, request waste collection jobs, and scan authorized hospital waste QR codes.
             </p>
-            <div className="pt-2">
-              <Link
-                to="/driver/dashboard"
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs px-6 py-3 rounded-2xl shadow-lg shadow-amber-600/25 transition-all cursor-pointer hover:scale-105 active:scale-95"
-              >
-                <Truck className="w-4 h-4" />
-                <span>ENTER LIVE DRIVER DASHBOARD & ACTIVE JOBS</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
           </div>
         </div>
 

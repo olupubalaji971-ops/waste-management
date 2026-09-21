@@ -279,19 +279,7 @@ const LandingPage = () => {
                 </div>
               </div>
 
-              <div className="pt-6 mt-4 space-y-2.5">
-                <div className="grid grid-cols-2 gap-2">
-                  <Link to="/driver/register" className="block w-full">
-                    <button className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-xs font-black py-2.5 px-2 rounded-xl transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5 active:scale-95">
-                      <span>+ Create Account</span>
-                    </button>
-                  </Link>
-                  <Link to="/driver/login" className="block w-full">
-                    <button className="w-full bg-slate-900 hover:bg-slate-950 text-white text-xs font-black py-2.5 px-2 rounded-xl transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5 active:scale-95">
-                      <span>Driver Login →</span>
-                    </button>
-                  </Link>
-                </div>
+              <div className="pt-6 mt-4">
                 <Link to="/driver-portal" className="block w-full">
                   <ShinyButton variant="amber" size="md" className="w-full">
                     <span>{t('enterDriverPortal', 'ENTER DRIVER FLEET PORTAL')}</span>
