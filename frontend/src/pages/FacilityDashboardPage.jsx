@@ -59,6 +59,7 @@ const FacilityDashboardPage = () => {
   const [activeFacilityId, setActiveFacilityId] = useState(
     localStorage.getItem('activeFacilityId') || user?.facilityId || 'FAC-TG-001'
   );
+  const [isFacilityDropdownOpen, setIsFacilityDropdownOpen] = useState(false);
   const [facilityData, setFacilityData] = useState(null);
   const [qrPayload, setQrPayload] = useState(null);
   const [deposits, setDeposits] = useState([]);
@@ -103,7 +104,11 @@ const FacilityDashboardPage = () => {
         } catch (e) {}
 
         const completedFromRequests = localRequests
-          .filter((r) => ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'].includes(r.status))
+          .filter(
+            (r) =>
+              ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'].includes(r.status) &&
+              r.disposalFacilityId === targetId
+          )
           .map((r) => ({
             orderId: r.requestId || r.orderId,
             requestId: r.requestId || r.orderId,
@@ -116,10 +121,15 @@ const FacilityDashboardPage = () => {
             wasteQuantity: r.wasteQuantity || 45.0,
             status: 'COMPLETED',
             disposedAt: r.disposedAt || r.completedAt || new Date().toISOString(),
-            disposalFacilityId: r.disposalFacilityId || targetId,
+            disposalFacilityId: r.disposalFacilityId,
           }));
 
-        const combined = [...apiDeposits, ...localDeposits, ...completedFromRequests];
+        // Filter localDeposits strictly for this facility targetId
+        const filteredLocalDeposits = localDeposits.filter(
+          (d) => d.disposalFacilityId === targetId
+        );
+
+        const combined = [...apiDeposits, ...filteredLocalDeposits, ...completedFromRequests];
         const unique = [];
         const seen = new Set();
         for (const item of combined) {
@@ -340,16 +350,61 @@ const FacilityDashboardPage = () => {
             </div>
           </div>
 
-          {/* Dedicated Active Facility Badge, Language, Theme & Exit / Switch Action */}
+          {/* Dedicated Active Facility Selector Dropdown */}
           <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
-            <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-2xl px-3.5 py-1.5 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-orange-600 animate-pulse" />
-              <span className="text-xs font-mono font-black text-orange-900">
-                {facilityData?.facilityId || activeFacilityId}
-              </span>
-              <span className="text-[10px] text-orange-700 font-medium hidden md:inline">
-                • {facilityData?.district || currentFacility.district}
-              </span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsFacilityDropdownOpen(!isFacilityDropdownOpen)}
+                className="flex items-center gap-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-2xl px-3.5 py-1.5 shadow-xs cursor-pointer transition-colors"
+                title="Switch CBMWTF Facility Portal"
+              >
+                <span className="w-2 h-2 rounded-full bg-orange-600 animate-pulse" />
+                <span className="text-xs font-mono font-black text-orange-900">
+                  {facilityData?.facilityId || activeFacilityId}
+                </span>
+                <span className="text-[10px] text-orange-700 font-medium hidden md:inline">
+                  • {facilityData?.district || currentFacility.district}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 text-orange-700 transition-transform ${isFacilityDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isFacilityDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 z-50 max-h-80 overflow-y-auto animate-in fade-in">
+                  <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1 flex items-center justify-between">
+                    <span>Select CBMWTF Facility Portal</span>
+                    <span>10 Authorized</span>
+                  </div>
+                  {ALL_10_FACILITIES.map((f) => {
+                    const isSelected = (facilityData?.facilityId || activeFacilityId) === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveFacilityId(f.id);
+                          localStorage.setItem('activeFacilityId', f.id);
+                          setIsFacilityDropdownOpen(false);
+                          fetchFacilityData(f.id, true);
+                          showToast(`Switched to ${f.name}`, 'success', 'Facility Loaded');
+                        }}
+                        className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between cursor-pointer ${
+                          isSelected ? 'bg-orange-50 text-orange-900 font-black border border-orange-300' : 'hover:bg-slate-50 text-slate-700 font-medium'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-mono font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">{f.id}</span>
+                            <strong className="text-xs text-slate-900 block truncate max-w-[200px]">{f.name}</strong>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">{f.district}</span>
+                        </div>
+                        {isSelected && <CheckCircle2 className="w-4 h-4 text-orange-600 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Language Selector */}

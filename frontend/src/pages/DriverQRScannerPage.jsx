@@ -306,8 +306,27 @@ const DriverQRScannerPage = () => {
       }
 
       if (isFacilityQR) {
+        // Find active job details for hospital context
+        let activeJob = null;
+        try {
+          const reqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+          activeJob =
+            reqs.find((r) => r.requestId === paramBookingId || r.batchId === paramBatchId) ||
+            reqs.find((r) => ['IN_TRANSIT', 'WASTE_COLLECTED', 'ACCEPTED', 'DRIVER_ACCEPTED'].includes(r.status)) ||
+            reqs[0];
+        } catch (e) {}
+
+        const targetHospitalName = activeJob?.hospitalName || activeJob?.acceptedHospitalName || 'Gandhi Hospital, Secunderabad';
+        const targetHospitalId = activeJob?.hospitalId || 'HOSP-TG-001';
+        const targetBatchId = activeJob?.batchId || paramBatchId || 'BWS-GANDHI-2026-0001';
+        const targetWasteCategory = activeJob?.wasteCategory || 'YELLOW';
+        const targetWasteQuantity = activeJob?.wasteQuantity || 45.0;
+        const targetOrderId = activeJob?.requestId || paramBookingId || `REQ-${Date.now().toString().slice(-6)}`;
+
         // EXECUTE FACILITY INTAKE VERIFICATION
         const res = await api.post('/driver/scan-disposal-qr', {
+          orderId: targetOrderId,
+          batchId: targetBatchId,
           facilityId,
           secureToken: facilityToken,
           rawQRString: rawQRText,
@@ -315,9 +334,58 @@ const DriverQRScannerPage = () => {
           driverName: driverProfile.driverName,
           driverPhone: driverProfile.driverPhone,
           vehicleNumber: driverProfile.vehicleNumber,
+          hospitalName: targetHospitalName,
+          hospitalId: targetHospitalId,
+          wasteCategory: targetWasteCategory,
+          wasteQuantity: targetWasteQuantity,
         });
 
         if (res.data?.success) {
+          const facilityName = res.data.data?.facility?.facilityName || 'CBMWTF Treatment Plant';
+
+          // Directly save driver and hospital details into the particular facility portal
+          try {
+            const facilityDeposits = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
+            const depositEntry = {
+              orderId: targetOrderId,
+              requestId: targetOrderId,
+              batchId: targetBatchId,
+              hospitalName: targetHospitalName,
+              hospitalId: targetHospitalId,
+              driverName: driverProfile.driverName || 'Venkatesh Rao',
+              driverPhone: driverProfile.driverPhone || '9848123456',
+              vehicleNumber: driverProfile.vehicleNumber || 'TS-09-UB-4501',
+              wasteCategory: targetWasteCategory,
+              wasteQuantity: targetWasteQuantity,
+              disposalFacilityId: facilityId,
+              disposalFacilityName: facilityName,
+              status: 'COMPLETED',
+              disposedAt: new Date().toISOString(),
+              treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
+            };
+
+            const updatedDeposits = [
+              depositEntry,
+              ...facilityDeposits.filter((d) => (d.orderId || d.requestId) !== targetOrderId && d.batchId !== targetBatchId),
+            ];
+            localStorage.setItem('biowaste_facility_deposits', JSON.stringify(updatedDeposits));
+
+            // Mark driver request COMPLETED with specific facility ID
+            const reqs = JSON.parse(localStorage.getItem('biowaste_driver_requests') || '[]');
+            localStorage.setItem(
+              'biowaste_driver_requests',
+              JSON.stringify(
+                reqs.map((r) =>
+                  r.requestId === targetOrderId || r.batchId === targetBatchId
+                    ? { ...r, status: 'COMPLETED', trackingActive: false, disposalFacilityId: facilityId }
+                    : r
+                )
+              )
+            );
+
+            window.dispatchEvent(new Event('storage'));
+          } catch (err) {}
+
           setFacilityScanResult(res.data.data);
           setScanResult(null);
           confetti({
@@ -326,7 +394,7 @@ const DriverQRScannerPage = () => {
             origin: { y: 0.5 },
           });
           showToast(
-            `🎉 FACILITY INTAKE VERIFIED! Driver details logged in ${res.data.data?.facility?.facilityName || facilityId}. Hospital notified!`,
+            `🎉 FACILITY INTAKE VERIFIED! Driver & hospital details saved in ${facilityName} portal.`,
             'success',
             'Disposal Complete'
           );

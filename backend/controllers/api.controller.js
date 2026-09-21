@@ -224,12 +224,10 @@ exports.getFacilityDashboard = async (req, res) => {
       facility = all[0];
     }
 
-    // Get deposited waste records for this facility
+    // Get deposited waste records strictly for this particular facility
     const rawDeposits = await DriverRequest.find({
-      $or: [
-        { disposalFacilityId: facility?.facilityId, status: { $in: ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'] } },
-        { status: 'COMPLETED' },
-      ],
+      disposalFacilityId: facility?.facilityId,
+      status: { $in: ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'] },
     });
 
     const formattedDeposits = rawDeposits.map((d) => ({
@@ -2485,6 +2483,11 @@ exports.scanDisposalQR = async (req, res) => {
     const effectiveDriverPhone = driverPhone || request.driverPhone || '+91 98480 22338';
     const effectiveVehicleNumber = vehicleNumber || request.vehicleNumber || 'TS-09-UB-4501';
     const effectiveDriverId = driverId || request.driverId || 'DRV-TS-0101';
+    const effectiveHospitalName = req.body?.hospitalName || request.hospitalName || 'Gandhi Hospital, Secunderabad';
+    const effectiveHospitalId = req.body?.hospitalId || request.hospitalId || 'HOSP-TG-001';
+    const effectiveBatchId = batchId || req.body?.batchId || request.batchId || 'BWS-GANDHI-001';
+    const effectiveWasteCategory = req.body?.wasteCategory || request.wasteCategory || 'YELLOW';
+    const effectiveWasteQuantity = Number(req.body?.wasteQuantity) || Number(request.wasteQuantity) || 45.0;
 
     // 4. Geofence Distance Validation via Haversine Formula (Permissive for local testing)
     const driverLat = latitude || request.currentLatitude;
@@ -2501,6 +2504,11 @@ exports.scanDisposalQR = async (req, res) => {
         driverName: effectiveDriverName,
         driverPhone: effectiveDriverPhone,
         vehicleNumber: effectiveVehicleNumber,
+        hospitalName: effectiveHospitalName,
+        hospitalId: effectiveHospitalId,
+        batchId: effectiveBatchId,
+        wasteCategory: effectiveWasteCategory,
+        wasteQuantity: effectiveWasteQuantity,
         trackingActive: false, // AUTOMATICALLY STOP LIVE GPS TRACKING
         disposalQrVerifiedAt: now,
         disposedAt: now,
@@ -2625,44 +2633,44 @@ exports.scanDisposalQR = async (req, res) => {
       console.warn('[scanDisposalQR] Non-critical notification error:', notifErr.message);
     }
 
+    const completionPayload = {
+      orderId: request.requestId,
+      batchId: effectiveBatchId,
+      hospitalId: effectiveHospitalId,
+      hospitalName: effectiveHospitalName,
+      facilityId: facility.facilityId,
+      facilityName: facility.facilityName,
+      driverName: effectiveDriverName,
+      driverPhone: effectiveDriverPhone,
+      vehicleNumber: effectiveVehicleNumber,
+      wasteQuantity: effectiveWasteQuantity,
+      wasteCategory: effectiveWasteCategory,
+      completedAt: now.toISOString(),
+      status: 'COMPLETED',
+      notification: hospitalNotif,
+    };
+
+    const facilityIntakePayload = {
+      orderId: request.requestId,
+      batchId: effectiveBatchId,
+      hospitalId: effectiveHospitalId,
+      hospitalName: effectiveHospitalName,
+      driverId: effectiveDriverId,
+      driverName: effectiveDriverName,
+      driverPhone: effectiveDriverPhone,
+      vehicleNumber: effectiveVehicleNumber,
+      wasteCategory: effectiveWasteCategory,
+      wasteQuantity: effectiveWasteQuantity,
+      disposedAt: now.toISOString(),
+      disposalFacilityId: facility.facilityId,
+      disposalFacilityName: facility.facilityName,
+      treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
+      status: 'COMPLETED',
+    };
+
     // 9. BROADCAST REAL-TIME NOTIFICATIONS VIA SOCKET.IO
     try {
       const io = req.io || global.io;
-      const completionPayload = {
-        orderId: request.requestId,
-        batchId: request.batchId,
-        hospitalId: request.hospitalId,
-        hospitalName: request.hospitalName,
-        facilityId: facility.facilityId,
-        facilityName: facility.facilityName,
-        driverName: effectiveDriverName,
-        driverPhone: effectiveDriverPhone,
-        vehicleNumber: effectiveVehicleNumber,
-        wasteQuantity: request.wasteQuantity,
-        wasteCategory: request.wasteCategory,
-        completedAt: now.toISOString(),
-        status: 'COMPLETED',
-        notification: hospitalNotif,
-      };
-
-      const facilityIntakePayload = {
-        orderId: request.requestId,
-        batchId: request.batchId,
-        hospitalId: request.hospitalId,
-        hospitalName: request.hospitalName,
-        driverId: effectiveDriverId,
-        driverName: effectiveDriverName,
-        driverPhone: effectiveDriverPhone,
-        vehicleNumber: effectiveVehicleNumber,
-        wasteCategory: request.wasteCategory || 'YELLOW',
-        wasteQuantity: request.wasteQuantity || 42.5,
-        disposedAt: now.toISOString(),
-        disposalFacilityId: facility.facilityId,
-        disposalFacilityName: facility.facilityName,
-        treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
-        status: 'COMPLETED',
-      };
-
       if (io) {
         // 1. Notify Origin Hospital
         io.to(`hospital:${request.hospitalId}`).emit('newNotification', hospitalNotif);
