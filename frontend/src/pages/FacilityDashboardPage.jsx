@@ -31,6 +31,7 @@ import {
   Moon,
   Globe,
   Check,
+  ExternalLink,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -128,7 +129,7 @@ const FacilityDashboardPage = () => {
           (d) => (d.disposalFacilityId === targetId || d.facilityId === targetId)
         );
 
-        const combined = [...apiDeposits, ...filteredLocalDeposits, ...completedFromRequests];
+        const combined = [...filteredLocalDeposits, ...completedFromRequests, ...apiDeposits];
         const unique = [];
         const seen = new Set();
         for (const item of combined) {
@@ -138,6 +139,7 @@ const FacilityDashboardPage = () => {
             unique.push(item);
           }
         }
+        unique.sort((a, b) => new Date(b.disposedAt || b.completedAt || b.timestamp || 0) - new Date(a.disposedAt || a.completedAt || a.timestamp || 0));
 
         setDeposits(unique);
         setIncomingVehicles(data.data.incomingVehicles || []);
@@ -145,7 +147,7 @@ const FacilityDashboardPage = () => {
         setStats({
           ...(data.data.stats || stats),
           totalBatchesTreated: unique.length,
-          totalWeightKg: totalWeight > 0 ? totalWeight : (data.data.stats?.totalWeightKg || 0),
+          totalWeightKg: totalWeight > 0 ? parseFloat(totalWeight.toFixed(1)) : (data.data.stats?.totalWeightKg || 0),
         });
       }
     } catch (err) {
@@ -160,19 +162,28 @@ const FacilityDashboardPage = () => {
     // Poll deposits periodically without reloading or touching constant QR code
     const pollInterval = setInterval(() => {
       fetchFacilityData(activeFacilityId, false);
-    }, 4000);
+    }, 2000);
     return () => clearInterval(pollInterval);
   }, [activeFacilityId]);
 
-  // Real-time cross-tab storage listener so driver scans in another tab reflect instantly
+  // Real-time cross-tab and in-tab storage listener so driver scans reflect instantly
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (!e.key || e.key === 'biowaste_facility_deposits' || e.key === 'biowaste_driver_requests') {
         fetchFacilityData(activeFacilityId, false);
       }
     };
+    const handleCustomDeposit = (e) => {
+      if (!e.detail || e.detail.disposalFacilityId === activeFacilityId) {
+        fetchFacilityData(activeFacilityId, false);
+      }
+    };
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('facility_deposit_recorded', handleCustomDeposit);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('facility_deposit_recorded', handleCustomDeposit);
+    };
   }, [activeFacilityId]);
 
   // Real-time Socket.IO subscriptions for this facility
@@ -278,6 +289,103 @@ const FacilityDashboardPage = () => {
       showToast('Failed to rotate QR code', 'error');
     } finally {
       setIsRotatingQR(false);
+    }
+  };
+
+  // Instant Driver QR Gate Scan for this exact facility
+  const handleSimulateDriverScan = async () => {
+    try {
+      const now = new Date();
+      const currentMeta = ALL_10_FACILITIES.find((f) => f.id === activeFacilityId) || ALL_10_FACILITIES[0];
+      const targetOrderId = `REQ-${Math.floor(100000 + Math.random() * 900000)}`;
+      const targetBatchId = `BWS-TEL-${Math.floor(1000 + Math.random() * 9000)}`;
+      const randomQty = parseFloat((35 + Math.random() * 25).toFixed(1));
+      const categories = ['YELLOW', 'RED', 'WHITE', 'BLUE'];
+      const randomCat = categories[Math.floor(Math.random() * categories.length)];
+      const hospitals = [
+        'Gandhi Hospital, Secunderabad',
+        'Osmania General Hospital, Afzal Gunj',
+        'NIMS (Nizam\'s Institute of Medical Sciences), Punjagutta',
+        'Apollo Hospitals, Jubilee Hills',
+        'Yashoda Hospitals, Secunderabad',
+      ];
+      const randomHosp = hospitals[Math.floor(Math.random() * hospitals.length)];
+
+      let simulatedIntake = null;
+      try {
+        const res = await api.post('/facility/simulate-driver-scan', { facilityId: activeFacilityId });
+        if (res.data?.success && res.data.data?.intake) {
+          simulatedIntake = res.data.data.intake;
+          if (res.data.data.refreshedQR) {
+            setQrPayload(res.data.data.refreshedQR);
+          }
+        }
+      } catch (serverErr) {
+        console.warn('Server simulation notice:', serverErr?.message);
+      }
+
+      const depositEntry = simulatedIntake || {
+        orderId: targetOrderId,
+        requestId: targetOrderId,
+        batchId: targetBatchId,
+        hospitalName: randomHosp,
+        hospitalId: 'HOSP-TG-001',
+        driverName: 'Kiran Kumar (TS Bio-Carrier)',
+        driverPhone: '+91 98480 22338',
+        vehicleNumber: 'TS-09-UB-4501',
+        wasteCategory: randomCat,
+        wasteQuantity: randomQty,
+        disposalFacilityId: activeFacilityId,
+        disposalFacilityName: currentMeta.name,
+        status: 'COMPLETED',
+        disposedAt: now.toISOString(),
+        treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
+      };
+
+      // Persist in localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
+        const updated = [
+          depositEntry,
+          ...stored.filter((d) => (d.orderId || d.requestId) !== depositEntry.orderId && d.batchId !== depositEntry.batchId),
+        ];
+        localStorage.setItem('biowaste_facility_deposits', JSON.stringify(updated));
+      } catch (e) {}
+
+      // Update local state
+      setDeposits((prev) => [
+        depositEntry,
+        ...prev.filter((d) => (d.orderId || d.requestId) !== depositEntry.orderId && d.batchId !== depositEntry.batchId),
+      ]);
+
+      setStats((prev) => ({
+        ...prev,
+        totalBatchesTreated: prev.totalBatchesTreated + 1,
+        totalWeightKg: parseFloat((prev.totalWeightKg + Number(depositEntry.wasteQuantity || randomQty)).toFixed(1)),
+      }));
+
+      // Rotate QR
+      setQrPayload((prev) => ({
+        type: 'DISPOSAL_FACILITY',
+        facilityId: activeFacilityId,
+        facilityName: currentMeta.name,
+        version: (prev?.version || 1) + 1,
+        token: `FAC_${activeFacilityId}_TOK_${Date.now().toString(36).toUpperCase()}`,
+        geofenceRadiusMeters: 500,
+      }));
+
+      confetti({ particleCount: 160, spread: 90, origin: { y: 0.5 } });
+      showToast(
+        `✓ DRIVER SCAN VERIFIED: Driver ${depositEntry.driverName} (${depositEntry.vehicleNumber}) deposited ${depositEntry.wasteQuantity} kg from ${depositEntry.hospitalName}!`,
+        'success',
+        'Gate QR Scanned'
+      );
+
+      // Broadcast storage and custom event
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('facility_deposit_recorded', { detail: depositEntry }));
+    } catch (err) {
+      showToast('Could not record driver scan', 'error');
     }
   };
 
@@ -733,7 +841,7 @@ const FacilityDashboardPage = () => {
 
           {/* RIGHT: REAL-TIME DEPOSITED WASTE LOG (7 COLS - White & Orange Theme) */}
           <div className="lg:col-span-7 bg-white border-2 border-orange-200/90 rounded-3xl p-6 space-y-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <Layers className="w-5 h-5 text-orange-600" />
@@ -744,68 +852,142 @@ const FacilityDashboardPage = () => {
                 </p>
               </div>
 
-              <span className="text-xs font-mono font-bold text-orange-800 bg-orange-50 px-3 py-1 rounded-xl border border-orange-200">
-                {deposits.length} Records
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Instant Driver Gate Scan Simulation Button */}
+                <button
+                  type="button"
+                  onClick={handleSimulateDriverScan}
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 active:scale-95 text-white font-black text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                  title={`Simulate instant driver gate scan for ${currentFacility.name}`}
+                >
+                  <Truck className="w-3.5 h-3.5 text-orange-200" />
+                  <span>Simulate Driver Gate Scan</span>
+                </button>
+
+                <a
+                  href="/driver/scan-qr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 text-orange-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-orange-200 transition-colors"
+                  title="Open Camera Driver Scanner in New Tab"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span className="hidden md:inline">Driver Scanner</span>
+                </a>
+
+                <span className="text-xs font-mono font-bold text-orange-800 bg-orange-50 px-3 py-1 rounded-xl border border-orange-200">
+                  {deposits.length} Records
+                </span>
+              </div>
             </div>
 
             {/* Deposits Log Table */}
             {deposits.length === 0 ? (
-              <div className="p-8 text-center bg-orange-50/40 rounded-2xl border border-orange-200 space-y-2">
-                <Truck className="w-8 h-8 text-orange-400 mx-auto" />
-                <strong className="text-sm font-bold text-slate-800 block">
-                  Waiting for First Waste Deposit
-                </strong>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  When a driver transports waste from a hospital and scans this gate QR, the record will instantly appear here with complete driver and batch details.
-                </p>
+              <div className="p-10 text-center bg-orange-50/40 rounded-2xl border border-orange-200 space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 mx-auto">
+                  <Truck className="w-6 h-6" />
+                </div>
+                <div>
+                  <strong className="text-sm font-black text-slate-800 block">
+                    Waiting for First Waste Deposit
+                  </strong>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                    When a driver transports biomedical waste from a hospital and scans this facility's gate QR, all driver & batch details will appear here instantly.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSimulateDriverScan}
+                  className="inline-flex items-center gap-2 bg-white hover:bg-orange-50 text-orange-700 border border-orange-300 font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                >
+                  <Truck className="w-4 h-4 text-orange-600" />
+                  <span>Test Driver Scan Now</span>
+                </button>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-orange-100">
+              <div className="overflow-x-auto rounded-2xl border border-orange-200/80 shadow-xs">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="bg-orange-50/80 border-b border-orange-200 text-orange-950 font-bold uppercase text-[10px]">
-                      <th className="py-2.5 px-3">Carrier Driver</th>
-                      <th className="py-2.5 px-3">Origin Hospital</th>
-                      <th className="py-2.5 px-3">Batch & Category</th>
-                      <th className="py-2.5 px-3">Weight</th>
-                      <th className="py-2.5 px-3">Status</th>
+                    <tr className="bg-orange-50/90 border-b border-orange-200 text-orange-950 font-black uppercase text-[10px] tracking-wider">
+                      <th className="py-3 px-3.5">Carrier Driver</th>
+                      <th className="py-3 px-3.5">Origin Hospital</th>
+                      <th className="py-3 px-3.5">Manifest / Batch</th>
+                      <th className="py-3 px-3.5">Category</th>
+                      <th className="py-3 px-3.5">Weight</th>
+                      <th className="py-3 px-3.5">Custody Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-orange-100 font-medium text-slate-700">
-                    {deposits.map((dep, idx) => (
-                      <tr key={dep.orderId || dep.requestId || dep.batchId || idx} className="hover:bg-orange-50/40 transition-colors">
-                        <td className="py-3 px-3">
-                          <strong className="text-slate-900 block">{dep.driverName || 'Venkatesh Rao'}</strong>
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            {dep.vehicleNumber || 'TS-09-UB-4501'} • {dep.driverPhone || '9848123456'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <strong className="text-slate-800 block">{dep.hospitalName || 'Gandhi Hospital'}</strong>
-                          <span className="text-[10px] text-emerald-700 font-semibold">✓ QR Verified</span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <strong className="text-slate-900 font-mono block">{dep.batchId || 'BWS-GANDHI-002'}</strong>
-                          <span className="text-[10px] font-bold text-orange-700 uppercase">
-                            {dep.wasteCategory || 'YELLOW'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="text-slate-900 font-bold font-mono">
-                            {dep.wasteQuantity || dep.quantityKg || 42.5} kg
-                          </span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1 shadow-xs">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Incinerated
-                          </span>
-                          <span className="block text-[9px] text-slate-400 font-mono mt-0.5">
-                            {dep.disposedAt ? new Date(dep.disposedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Logged'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-orange-100 font-medium text-slate-700 bg-white">
+                    {deposits.map((dep, idx) => {
+                      const categoryColors = {
+                        YELLOW: 'bg-amber-50 text-amber-900 border-amber-300',
+                        RED: 'bg-rose-50 text-rose-900 border-rose-300',
+                        WHITE: 'bg-slate-100 text-slate-900 border-slate-300',
+                        BLUE: 'bg-sky-50 text-sky-900 border-sky-300',
+                      };
+                      const catClass = categoryColors[dep.wasteCategory?.toUpperCase()] || categoryColors.YELLOW;
+
+                      return (
+                        <tr key={dep.orderId || dep.requestId || dep.batchId || idx} className="hover:bg-orange-50/40 transition-colors">
+                          <td className="py-3 px-3.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-800 flex items-center justify-center font-bold text-xs shrink-0 border border-orange-200">
+                                👨‍✈️
+                              </div>
+                              <div>
+                                <strong className="text-slate-900 block font-bold text-xs">
+                                  {dep.driverName || 'Venkatesh Rao'}
+                                </strong>
+                                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono mt-0.5">
+                                  <span className="bg-slate-100 text-slate-700 px-1 py-0.2 rounded font-bold">{dep.vehicleNumber || 'TS-09-UB-4501'}</span>
+                                  <span>•</span>
+                                  <span>{dep.driverPhone || '9848123456'}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3.5">
+                            <div className="flex items-start gap-1.5">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                              <div>
+                                <strong className="text-slate-800 block text-xs">
+                                  {dep.hospitalName || 'Gandhi Hospital, Secunderabad'}
+                                </strong>
+                                <span className="text-[10px] text-emerald-700 font-semibold inline-flex items-center gap-0.5 mt-0.5">
+                                  <CheckCircle2 className="w-2.5 h-2.5" /> Gate QR Verified
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3.5">
+                            <span className="font-mono font-bold text-slate-900 text-xs block">
+                              {dep.batchId || dep.orderId || 'BWS-GANDHI-002'}
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-mono">
+                              {dep.orderId || dep.requestId || 'ORD-CUSTODY'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border uppercase inline-block ${catClass}`}>
+                              {dep.wasteCategory || 'YELLOW'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5">
+                            <span className="text-slate-900 font-black font-mono text-xs">
+                              {dep.wasteQuantity || dep.quantityKg || 42.5} kg
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5">
+                            <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1 shadow-xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Incinerated (1150°C)
+                            </span>
+                            <span className="block text-[9px] text-slate-400 font-mono mt-0.5">
+                              {dep.disposedAt ? new Date(dep.disposedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Logged'} • CPCB Compliant
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

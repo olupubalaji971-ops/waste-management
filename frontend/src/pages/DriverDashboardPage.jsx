@@ -610,6 +610,7 @@ const DriverDashboardPage = () => {
             localStorage.setItem('biowaste_facility_deposits', JSON.stringify(updatedFacilityDeposits));
 
             window.dispatchEvent(new Event('storage'));
+            window.dispatchEvent(new CustomEvent('facility_deposit_recorded', { detail: depositEntry }));
           } catch (e) {}
 
           await fetchDriverData();
@@ -845,6 +846,7 @@ const DriverDashboardPage = () => {
           localStorage.setItem('biowaste_facility_deposits', JSON.stringify(updatedFacilityDeposits));
 
           window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new CustomEvent('facility_deposit_recorded', { detail: depositEntry }));
         } catch (e) {}
 
         setTimeout(() => {
@@ -1014,6 +1016,17 @@ const DriverDashboardPage = () => {
             <span className="text-orange-300">•</span>
             <span className="font-bold">{currentGps.speed} km/h</span>
           </div>
+
+          {/* Quick Scan Facility Gate QR Action */}
+          <button
+            type="button"
+            onClick={() => handleOpenScanner(activeJob, 'DISPOSAL')}
+            className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Scan CBMWTF Facility Gate QR Code"
+          >
+            <QrCode className="w-4 h-4 text-orange-200" />
+            <span className="hidden sm:inline">Scan Facility QR</span>
+          </button>
 
           {/* Notifications Dropdown */}
           <div className="relative">
