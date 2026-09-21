@@ -43,6 +43,19 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 
+const ALL_10_FACILITIES = [
+  { id: 'FAC-TG-001', name: 'Ramky Enviro CBMWTF (Dundigal Central Facility)', district: 'Medchal-Malkajgiri', email: 'ramky@biowastesmart.in' },
+  { id: 'FAC-TG-002', name: 'Maridi Eco Industries CBMWTF Medchal', district: 'Medchal', email: 'maridi@biowastesmart.in' },
+  { id: 'FAC-TG-003', name: 'G.J. Multiclave Bio-Medical Facility Bibinagar', district: 'Yadadri Bhuvanagiri', email: 'multiclave@biowastesmart.in' },
+  { id: 'FAC-TG-004', name: 'Medicare Environmental Management Pashamylaram', district: 'Sangareddy', email: 'medicare@biowastesmart.in' },
+  { id: 'FAC-TG-005', name: 'Clean Enviro Bio-Disposal Cherlapally', district: 'Medchal-Malkajgiri', email: 'cleanenviro@biowastesmart.in' },
+  { id: 'FAC-TG-006', name: 'Apex Waste Solutions CBMWTF Balanagar', district: 'Hyderabad', email: 'apex@biowastesmart.in' },
+  { id: 'FAC-TG-007', name: 'Telangana Eco-Care Treatment Plant Choutuppal', district: 'Yadadri Bhuvanagiri', email: 'ecocare@biowastesmart.in' },
+  { id: 'FAC-TG-008', name: 'Warangal Regional Bio-Management Facility', district: 'Warangal', email: 'warangalcbmwtf@biowastesmart.in' },
+  { id: 'FAC-TG-009', name: 'Karimnagar Green Waste Treatment Plant', district: 'Karimnagar', email: 'karimnagar@biowastesmart.in' },
+  { id: 'FAC-TG-010', name: 'Nizamabad Bio-Disposal & Incineration Facility', district: 'Nizamabad', email: 'nizamabad@biowastesmart.in' },
+];
+
 const DriverDashboardPage = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -502,23 +515,27 @@ const DriverDashboardPage = () => {
 
       if (isFacilityQR) {
         // DISPOSAL FACILITY QR SCAN - Auto Process
-        const targetFacility = disposalFacilities.find((f) => f.facilityId === facilityId) || {
-          facilityId: facilityId || 'FAC-TG-001',
+        const matchedMeta = ALL_10_FACILITIES.find((f) => f.id === facilityId) ||
+          ALL_10_FACILITIES.find((f) => f.id === selectedFacilityId) ||
+          ALL_10_FACILITIES[0];
+        const resolvedFacilityId = facilityId || selectedFacilityId || matchedMeta.id;
+        const targetFacility = disposalFacilities.find((f) => f.facilityId === resolvedFacilityId) || {
+          facilityId: resolvedFacilityId,
+          facilityName: matchedMeta.name,
           latitude: 17.5892,
           longitude: 78.4315,
-          qrToken: 'FAC_RAMKY_SECURE_TOKEN_2026_A98',
+          qrToken: `FAC_${resolvedFacilityId}_SECURE_TOKEN_2026`,
         };
-        const resolvedFacilityId = facilityId || targetFacility?.facilityId || selectedFacilityId || 'FAC-TG-001';
-        const targetFacilityObj = disposalFacilities.find((f) => f.facilityId === resolvedFacilityId) || targetFacility;
+        const resolvedFacilityName = targetFacility?.facilityName || matchedMeta.name;
 
         const res = await api.post('/driver/scan-disposal-qr', {
           orderId: targetJob?.requestId,
           batchId: targetJob?.batchId,
           facilityId: resolvedFacilityId,
-          secureToken: secureToken || targetFacilityObj?.qrToken,
+          secureToken: secureToken || targetFacility?.qrToken,
           rawQRString: typeof rawCode === 'string' ? rawCode : JSON.stringify(rawCode),
-          latitude: targetFacilityObj?.latitude || 17.5892,
-          longitude: targetFacilityObj?.longitude || 78.4315,
+          latitude: targetFacility?.latitude || 17.5892,
+          longitude: targetFacility?.longitude || 78.4315,
           driverId: driverProfile.driverId,
           driverName: driverProfile.name,
           driverPhone: driverProfile.phone,
@@ -532,7 +549,7 @@ const DriverDashboardPage = () => {
         if (res.data?.success) {
           setScanSuccessResult(res.data.data);
           confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
-          showToast('🎉 FACILITY INTAKE VERIFIED! Waste deposited & complete disposal cycle finished.', 'success', 'Disposal Complete');
+          showToast(`🎉 FACILITY INTAKE VERIFIED! Waste deposited at ${resolvedFacilityName}.`, 'success', 'Disposal Complete');
 
           const completedOrderId = targetJob?.requestId || res.data.data?.requestId;
           const completedBatchId = targetJob?.batchId || batchId;
@@ -541,7 +558,7 @@ const DriverDashboardPage = () => {
           setMyRequests((prev) =>
             prev.map((r) =>
               r.requestId === completedOrderId || r.batchId === completedBatchId
-                ? { ...r, status: 'COMPLETED', trackingActive: false, disposalFacilityId: resolvedFacilityId }
+                ? { ...r, status: 'COMPLETED', trackingActive: false, disposalFacilityId: resolvedFacilityId, disposalFacilityName: resolvedFacilityName }
                 : r
             )
           );
@@ -554,7 +571,7 @@ const DriverDashboardPage = () => {
               JSON.stringify(
                 reqs.map((r) =>
                   r.requestId === completedOrderId || r.batchId === completedBatchId
-                    ? { ...r, status: 'COMPLETED', trackingActive: false, disposalFacilityId: resolvedFacilityId }
+                    ? { ...r, status: 'COMPLETED', trackingActive: false, disposalFacilityId: resolvedFacilityId, disposalFacilityName: resolvedFacilityName }
                     : r
                 )
               )
@@ -563,7 +580,7 @@ const DriverDashboardPage = () => {
             localStorage.setItem(
               'biowaste_hospital_batches',
               JSON.stringify(
-                batches.map((b) => (b.batchId === completedBatchId ? { ...b, status: 'COMPLETED', disposalFacilityId: resolvedFacilityId } : b))
+                batches.map((b) => (b.batchId === completedBatchId ? { ...b, status: 'COMPLETED', disposalFacilityId: resolvedFacilityId, disposalFacilityName: resolvedFacilityName } : b))
               )
             );
 
@@ -581,7 +598,7 @@ const DriverDashboardPage = () => {
               wasteCategory: targetJob?.wasteCategory || 'YELLOW',
               wasteQuantity: targetJob?.wasteQuantity || 45.0,
               disposalFacilityId: resolvedFacilityId,
-              disposalFacilityName: targetFacilityObj?.facilityName || targetFacilityObj?.name || 'Ramky Enviro CBMWTF',
+              disposalFacilityName: resolvedFacilityName,
               status: 'COMPLETED',
               disposedAt: new Date().toISOString(),
               treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',
@@ -792,6 +809,19 @@ const DriverDashboardPage = () => {
 
           // Store driver and waste details in Facility Portal records
           const facilityDeposits = JSON.parse(localStorage.getItem('biowaste_facility_deposits') || '[]');
+          let fallbackFacId = selectedFacilityId || 'FAC-TG-001';
+          if (rawCode) {
+            try {
+              const p = typeof rawCode === 'string' && (rawCode.startsWith('{') || rawCode.startsWith('[')) ? JSON.parse(rawCode) : null;
+              if (p?.facilityId) fallbackFacId = p.facilityId;
+            } catch (e) {}
+            if (typeof rawCode === 'string' && rawCode.includes('FAC-')) {
+              const match = rawCode.match(/FAC-TG-[0-9]{3}/);
+              if (match) fallbackFacId = match[0];
+            }
+          }
+          const fallbackMeta = ALL_10_FACILITIES.find((f) => f.id === fallbackFacId) || ALL_10_FACILITIES[0];
+
           const depositEntry = {
             orderId: completedOrderId,
             requestId: completedOrderId,
@@ -802,8 +832,8 @@ const DriverDashboardPage = () => {
             vehicleNumber: driverProfile.vehicleNumber || 'TS-09-UB-4501',
             wasteCategory: targetJob?.wasteCategory || 'YELLOW',
             wasteQuantity: targetJob?.wasteQuantity || 45.0,
-            disposalFacilityId: selectedFacilityId || 'FAC-TG-001',
-            disposalFacilityName: 'Ramky Enviro CBMWTF (Dundigal Central Facility)',
+            disposalFacilityId: fallbackFacId,
+            disposalFacilityName: fallbackMeta.name,
             status: 'COMPLETED',
             disposedAt: new Date().toISOString(),
             treatmentMethod: 'High-Temperature Incineration (1150°C) & Autoclave Sterilization',

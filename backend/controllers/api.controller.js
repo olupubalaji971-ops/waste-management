@@ -22,6 +22,46 @@ const JWT_SECRET = process.env.JWT_SECRET || 'biowaste_smart_sih2026_super_secre
 const DISPOSAL_GEOFENCE_RADIUS_METERS = parseFloat(process.env.DISPOSAL_GEOFENCE_RADIUS || '500');
 const DISPOSAL_GEOFENCE_RADIUS_KM = DISPOSAL_GEOFENCE_RADIUS_METERS / 1000;
 
+const TELANGANA_10_FACILITIES = [
+  { facilityId: 'FAC-TG-001', facilityName: 'Ramky Enviro CBMWTF (Dundigal Central Facility)', district: 'Medchal-Malkajgiri', email: 'ramky@biowastesmart.in', latitude: 17.5892, longitude: 78.4315, qrToken: 'FAC_RAMKY_SECURE_TOKEN_2026_A98' },
+  { facilityId: 'FAC-TG-002', facilityName: 'Maridi Eco Industries CBMWTF Medchal', district: 'Medchal', email: 'maridi@biowastesmart.in', latitude: 17.6189, longitude: 78.4812, qrToken: 'FAC_MARIDI_SECURE_TOKEN_2026_B12' },
+  { facilityId: 'FAC-TG-003', facilityName: 'G.J. Multiclave Bio-Medical Facility Bibinagar', district: 'Yadadri Bhuvanagiri', email: 'multiclave@biowastesmart.in', latitude: 17.4721, longitude: 78.7845, qrToken: 'FAC_MULTICLAVE_SECURE_TOKEN_2026_C33' },
+  { facilityId: 'FAC-TG-004', facilityName: 'Medicare Environmental Management Pashamylaram', district: 'Sangareddy', email: 'medicare@biowastesmart.in', latitude: 17.5234, longitude: 78.1892, qrToken: 'FAC_MEDICARE_SECURE_TOKEN_2026_D45' },
+  { facilityId: 'FAC-TG-005', facilityName: 'Clean Enviro Bio-Disposal Cherlapally', district: 'Medchal-Malkajgiri', email: 'cleanenviro@biowastesmart.in', latitude: 17.4612, longitude: 78.6012, qrToken: 'FAC_CLEANENVIRO_SECURE_TOKEN_2026_E55' },
+  { facilityId: 'FAC-TG-006', facilityName: 'Apex Waste Solutions CBMWTF Balanagar', district: 'Hyderabad', email: 'apex@biowastesmart.in', latitude: 17.4712, longitude: 78.4412, qrToken: 'FAC_APEX_SECURE_TOKEN_2026_F67' },
+  { facilityId: 'FAC-TG-007', facilityName: 'Telangana Eco-Care Treatment Plant Choutuppal', district: 'Yadadri Bhuvanagiri', email: 'ecocare@biowastesmart.in', latitude: 17.2412, longitude: 78.8912, qrToken: 'FAC_ECOCARE_SECURE_TOKEN_2026_G78' },
+  { facilityId: 'FAC-TG-008', facilityName: 'Warangal Regional Bio-Management Facility', district: 'Warangal', email: 'warangalcbmwtf@biowastesmart.in', latitude: 17.9812, longitude: 79.5812, qrToken: 'FAC_WARANGAL_SECURE_TOKEN_2026_H89' },
+  { facilityId: 'FAC-TG-009', facilityName: 'Karimnagar Green Waste Treatment Plant', district: 'Karimnagar', email: 'karimnagar@biowastesmart.in', latitude: 18.4312, longitude: 79.1312, qrToken: 'FAC_KARIMNAGAR_SECURE_TOKEN_2026_I90' },
+  { facilityId: 'FAC-TG-010', facilityName: 'Nizamabad Bio-Disposal & Incineration Facility', district: 'Nizamabad', email: 'nizamabad@biowastesmart.in', latitude: 18.6612, longitude: 78.1124, qrToken: 'FAC_NIZAMABAD_SECURE_TOKEN_2026_J66' },
+];
+
+const resolveFacilityById = async (targetId) => {
+  const cleanId = (targetId || 'FAC-TG-001').trim();
+  let facility = await DisposalFacility.findOne({ facilityId: cleanId });
+  if (!facility) {
+    const all = await DisposalFacility.find();
+    facility = all.find((f) => f.facilityId === cleanId);
+  }
+  if (!facility) {
+    const seedMeta = TELANGANA_10_FACILITIES.find((f) => f.facilityId === cleanId) || TELANGANA_10_FACILITIES[0];
+    try {
+      facility = await DisposalFacility.create({
+        ...seedMeta,
+        facilityType: 'Common Bio-Medical Waste Treatment Facility (CBMWTF)',
+        cpcbRegistrationNumber: `CPCB/TSPCB/CBMWTF/${seedMeta.facilityId}-2026`,
+        qrVersion: 1,
+        dailyCapacityKg: 5000,
+        activeIncinerators: 2,
+        activeAutoclaves: 3,
+        isActive: true,
+      });
+    } catch (e) {
+      facility = seedMeta;
+    }
+  }
+  return facility;
+};
+
 /**
  * Haversine formula to compute great-circle distance between two GPS coordinates in kilometers
  */
@@ -217,16 +257,14 @@ exports.facilityLogin = async (req, res) => {
 exports.getFacilityDashboard = async (req, res) => {
   try {
     const facilityId = req.query?.facilityId || req.user?.facilityId || 'FAC-TG-001';
-    let facility = await DisposalFacility.findOne({ facilityId });
-
-    if (!facility) {
-      const all = await DisposalFacility.find();
-      facility = all[0];
-    }
+    const facility = await resolveFacilityById(facilityId);
 
     // Get deposited waste records strictly for this particular facility
     const rawDeposits = await DriverRequest.find({
-      disposalFacilityId: facility?.facilityId,
+      $or: [
+        { disposalFacilityId: facility?.facilityId },
+        { disposalFacilityId: facilityId },
+      ],
       status: { $in: ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'] },
     });
 
@@ -2415,11 +2453,7 @@ exports.scanDisposalQR = async (req, res) => {
     }
 
     // 1. Verify Facility Exists and is Active
-    let facility = await DisposalFacility.findOne({ facilityId: parsedFacilityId });
-    if (!facility) {
-      const allFacilities = await DisposalFacility.find();
-      facility = allFacilities.find((f) => f.facilityId === parsedFacilityId) || allFacilities[0];
-    }
+    let facility = await resolveFacilityById(parsedFacilityId);
 
     if (!facility) {
       return res.status(404).json({ success: false, message: 'Authorized disposal facility not found in registry' });

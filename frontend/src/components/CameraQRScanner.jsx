@@ -15,7 +15,21 @@ import {
   Check,
 } from 'lucide-react';
 
+const TEN_FACILITIES = [
+  { id: 'FAC-TG-001', name: 'Ramky Enviro CBMWTF (Dundigal Central Facility)' },
+  { id: 'FAC-TG-002', name: 'Maridi Eco Industries CBMWTF Medchal' },
+  { id: 'FAC-TG-003', name: 'G.J. Multiclave Bio-Medical Facility Bibinagar' },
+  { id: 'FAC-TG-004', name: 'Medicare Environmental Management Pashamylaram' },
+  { id: 'FAC-TG-005', name: 'Clean Enviro Bio-Disposal Cherlapally' },
+  { id: 'FAC-TG-006', name: 'Apex Waste Solutions CBMWTF Balanagar' },
+  { id: 'FAC-TG-007', name: 'Telangana Eco-Care Treatment Plant Choutuppal' },
+  { id: 'FAC-TG-008', name: 'Warangal Regional Bio-Management Facility' },
+  { id: 'FAC-TG-009', name: 'Karimnagar Green Waste Treatment Plant' },
+  { id: 'FAC-TG-010', name: 'Nizamabad Bio-Disposal & Incineration Facility' },
+];
+
 const CameraQRScanner = ({
+  isOpen,
   onScanSuccess,
   onClose,
   scannerType = 'HOSPITAL', // 'HOSPITAL' or 'DISPOSAL'
@@ -34,6 +48,9 @@ const CameraQRScanner = ({
   const [hasTorch, setHasTorch] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [manualInput, setManualInput] = useState('');
+  const [selectedFacilityForScan, setSelectedFacilityForScan] = useState(
+    expectedBatchId?.startsWith('FAC-') ? expectedBatchId : 'FAC-TG-001'
+  );
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -412,6 +429,23 @@ const CameraQRScanner = ({
 
         {/* Quick Instant Verification & Manual Input (Guaranteed to work even on desktop/no camera) */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+          {isFacilityMode && (
+            <div className="flex items-center gap-2 pb-1">
+              <span className="text-[10px] text-slate-400 font-bold uppercase shrink-0">CBMWTF Yard:</span>
+              <select
+                value={selectedFacilityForScan}
+                onChange={(e) => setSelectedFacilityForScan(e.target.value)}
+                className="bg-slate-800 text-amber-300 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-slate-700 outline-none flex-1 font-mono"
+              >
+                {TEN_FACILITIES.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.id} • {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
@@ -420,21 +454,23 @@ const CameraQRScanner = ({
             {(expectedBatchId || isFacilityMode) && (
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  const targetFac = TEN_FACILITIES.find((f) => f.id === selectedFacilityForScan) || TEN_FACILITIES[0];
                   handleDetectedCode(
                     isFacilityMode
                       ? JSON.stringify({
                           type: 'DISPOSAL_FACILITY',
-                          facilityId: expectedBatchId || 'FAC-TG-001',
+                          facilityId: targetFac.id,
+                          facilityName: targetFac.name,
                           version: 1,
-                          token: 'FAC_RAMKY_SECURE_TOKEN_2026_A98',
+                          token: `FAC_${targetFac.id}_SECURE_TOKEN_2026`,
                         })
                       : expectedBatchId || 'BWS-GANDHI-001'
-                  )
-                }
+                  );
+                }}
                 className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-black px-3 py-1.5 rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1 active:scale-95"
               >
-                <span>⚡ Quick Verify {isFacilityMode ? 'Facility Gate' : 'Batch QR'}</span>
+                <span>⚡ Quick Verify {isFacilityMode ? `${selectedFacilityForScan}` : 'Batch QR'}</span>
               </button>
             )}
           </div>

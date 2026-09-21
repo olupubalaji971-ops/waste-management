@@ -71,10 +71,8 @@ function App() {
         <Route path="/hospital/dashboard" element={<HospitalDashboard />} />
 
         {/* Driver Portal, Register, Login, Dashboard & QR Scanner */}
-        <Route path="/driver-portal" element={<Navigate to="/driver/dashboard" replace />} />
-        <Route path="/driver/portal" element={<Navigate to="/driver/dashboard" replace />} />
         <Route
-          path="/driver/portal-info"
+          path="/driver-portal"
           element={
             <>
               <Navbar />
@@ -82,10 +80,29 @@ function App() {
             </>
           }
         />
+        <Route
+          path="/driver/portal"
+          element={
+            <>
+              <Navbar />
+              <DriverPortalPage />
+            </>
+          }
+        />
+        <Route
+          path="/driver"
+          element={
+            <>
+              <Navbar />
+              <DriverPortalPage />
+            </>
+          }
+        />
+        <Route path="/driver-portal/register" element={<Navigate to="/driver/register" replace />} />
+        <Route path="/driver-portal/login" element={<Navigate to="/driver/login" replace />} />
         <Route path="/driver/register" element={<DriverRegisterPage />} />
         <Route path="/driver/login" element={<DriverLoginPage />} />
         <Route path="/driver/dashboard" element={<DriverDashboardPage />} />
-        <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
         <Route path="/driver-dashboard" element={<Navigate to="/driver/dashboard" replace />} />
         <Route path="/driver/scan-qr" element={<DriverQRScannerPage />} />
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, Sparkles, Sun, Moon, Globe, ChevronDown, Check, Heart } from 'lucide-react';
+import { Leaf, Sparkles, Sun, Moon, Globe, ChevronDown, Check, Heart, Truck, Building2, Factory } from 'lucide-react';
 import SegregationAssistantModal from './SegregationAssistantModal';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -49,6 +49,31 @@ const Navbar = () => {
                 </p>
               </div>
             </Link>
+
+            {/* Middle Quick Navigation Links */}
+            <div className="hidden md:flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200">
+              <Link
+                to="/hospitals"
+                className="px-2.5 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1"
+              >
+                <Building2 className="w-3.5 h-3.5 text-[#519755]" />
+                <span>Hospitals</span>
+              </Link>
+              <Link
+                to="/driver-portal"
+                className="px-2.5 py-1.5 rounded-xl hover:bg-amber-50 dark:hover:bg-slate-800 hover:text-amber-800 transition-colors flex items-center gap-1"
+              >
+                <Truck className="w-3.5 h-3.5 text-amber-600" />
+                <span>Driver Fleet</span>
+              </Link>
+              <Link
+                to="/facility/login"
+                className="px-2.5 py-1.5 rounded-xl hover:bg-purple-50 dark:hover:bg-slate-800 hover:text-purple-800 transition-colors flex items-center gap-1"
+              >
+                <Factory className="w-3.5 h-3.5 text-purple-600" />
+                <span>Facilities</span>
+              </Link>
+            </div>
 
             {/* Navigation Right: Blood Network, Language, Dark Mode & Segregation Guide */}
             <div className="flex items-center gap-2 sm:gap-3">

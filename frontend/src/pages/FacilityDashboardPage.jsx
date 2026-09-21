@@ -84,11 +84,10 @@ const FacilityDashboardPage = () => {
 
       if (data?.success && data.data) {
         setFacilityData(data.data.facility);
-        // KEEP QR CODE COMPLETELY CONSTANT - only refresh when version or token changes after a driver scan
+        // Refresh QR payload when facilityId, version, or token changes
         if (data.data.qrPayload) {
           setQrPayload((prev) => {
-            if (!prev) return data.data.qrPayload;
-            if (prev.version !== data.data.qrPayload.version || prev.token !== data.data.qrPayload.token) {
+            if (!prev || prev.facilityId !== data.data.qrPayload.facilityId || prev.version !== data.data.qrPayload.version || prev.token !== data.data.qrPayload.token) {
               return data.data.qrPayload;
             }
             return prev;
@@ -107,7 +106,7 @@ const FacilityDashboardPage = () => {
           .filter(
             (r) =>
               ['COMPLETED', 'DISPOSAL_QR_VERIFIED', 'DEPOSITED_AND_TREATED'].includes(r.status) &&
-              r.disposalFacilityId === targetId
+              (r.disposalFacilityId === targetId || r.facilityId === targetId)
           )
           .map((r) => ({
             orderId: r.requestId || r.orderId,
@@ -121,12 +120,12 @@ const FacilityDashboardPage = () => {
             wasteQuantity: r.wasteQuantity || 45.0,
             status: 'COMPLETED',
             disposedAt: r.disposedAt || r.completedAt || new Date().toISOString(),
-            disposalFacilityId: r.disposalFacilityId,
+            disposalFacilityId: r.disposalFacilityId || targetId,
           }));
 
         // Filter localDeposits strictly for this facility targetId
         const filteredLocalDeposits = localDeposits.filter(
-          (d) => d.disposalFacilityId === targetId
+          (d) => (d.disposalFacilityId === targetId || d.facilityId === targetId)
         );
 
         const combined = [...apiDeposits, ...filteredLocalDeposits, ...completedFromRequests];
@@ -310,6 +309,10 @@ const FacilityDashboardPage = () => {
     const newId = e.target.value;
     setActiveFacilityId(newId);
     localStorage.setItem('activeFacilityId', newId);
+    setFacilityData(null);
+    setQrPayload(null);
+    setDeposits([]);
+    fetchFacilityData(newId, true);
   };
 
   const currentFacility = ALL_10_FACILITIES.find((f) => f.id === activeFacilityId) || ALL_10_FACILITIES[0];
@@ -385,6 +388,9 @@ const FacilityDashboardPage = () => {
                           setActiveFacilityId(f.id);
                           localStorage.setItem('activeFacilityId', f.id);
                           setIsFacilityDropdownOpen(false);
+                          setFacilityData(null);
+                          setQrPayload(null);
+                          setDeposits([]);
                           fetchFacilityData(f.id, true);
                           showToast(`Switched to ${f.name}`, 'success', 'Facility Loaded');
                         }}
@@ -637,21 +643,14 @@ const FacilityDashboardPage = () => {
               <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center">
                 <QRCodeSVG
                   id="facility-gate-qr-svg"
-                  value={
-                    qrPayload
-                      ? JSON.stringify({
-                          type: 'DISPOSAL_FACILITY',
-                          facilityId: qrPayload.facilityId || activeFacilityId,
-                          version: qrPayload.version || 1,
-                          token: qrPayload.token || facilityData?.qrToken || 'FAC_RAMKY_SECURE_TOKEN_2026_A98',
-                        })
-                      : JSON.stringify({
-                          type: 'DISPOSAL_FACILITY',
-                          facilityId: activeFacilityId,
-                          version: 1,
-                          token: 'FAC_RAMKY_SECURE_TOKEN_2026_A98',
-                        })
-                  }
+                  value={JSON.stringify({
+                    type: 'DISPOSAL_FACILITY',
+                    facilityId: activeFacilityId,
+                    facilityName: facilityData?.facilityName || currentFacility?.name,
+                    district: currentFacility?.district,
+                    version: qrPayload?.version || 1,
+                    token: qrPayload?.token || facilityData?.qrToken || `FAC_${activeFacilityId}_SECURE_TOKEN_2026`,
+                  })}
                   size={210}
                   level="M"
                   includeMargin={true}

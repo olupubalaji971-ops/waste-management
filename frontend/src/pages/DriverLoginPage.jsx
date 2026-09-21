@@ -152,11 +152,21 @@ const DriverLoginPage = () => {
             </div>
           </div>
 
-          <div className="text-center pt-2">
-            <span className="text-xs text-slate-500">New driver joining the fleet? </span>
-            <Link to="/driver-portal/register" className="text-xs font-bold text-amber-700 hover:underline">
-              Register New Driver Profile
+          {/* Prominent Create Account CTA */}
+          <div className="pt-3 border-t border-slate-100 space-y-3">
+            <Link
+              to="/driver/register"
+              className="w-full bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-slate-800 hover:text-amber-900 border border-slate-200 py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2"
+            >
+              <User className="w-4 h-4 text-amber-600" />
+              <span>NEW DRIVER? CREATE ACCOUNT</span>
             </Link>
+
+            <div className="text-center">
+              <Link to="/driver/dashboard" className="text-xs text-slate-500 hover:text-slate-800 font-semibold underline">
+                Skip to Live Demo Driver Console Directly →
+              </Link>
+            </div>
           </div>
 
         </div>

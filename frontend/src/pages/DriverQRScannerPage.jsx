@@ -31,6 +31,19 @@ import {
   Upload,
 } from 'lucide-react';
 
+const ALL_10_FACILITIES = [
+  { id: 'FAC-TG-001', name: 'Ramky Enviro CBMWTF (Dundigal Central Facility)' },
+  { id: 'FAC-TG-002', name: 'Maridi Eco Industries CBMWTF Medchal' },
+  { id: 'FAC-TG-003', name: 'G.J. Multiclave Bio-Medical Facility Bibinagar' },
+  { id: 'FAC-TG-004', name: 'Medicare Environmental Management Pashamylaram' },
+  { id: 'FAC-TG-005', name: 'Clean Enviro Bio-Disposal Cherlapally' },
+  { id: 'FAC-TG-006', name: 'Apex Waste Solutions CBMWTF Balanagar' },
+  { id: 'FAC-TG-007', name: 'Telangana Eco-Care Treatment Plant Choutuppal' },
+  { id: 'FAC-TG-008', name: 'Warangal Regional Bio-Management Facility' },
+  { id: 'FAC-TG-009', name: 'Karimnagar Green Waste Treatment Plant' },
+  { id: 'FAC-TG-010', name: 'Nizamabad Bio-Disposal & Incineration Facility' },
+];
+
 const DriverQRScannerPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -341,7 +354,8 @@ const DriverQRScannerPage = () => {
         });
 
         if (res.data?.success) {
-          const facilityName = res.data.data?.facility?.facilityName || 'CBMWTF Treatment Plant';
+          const matchedMeta = ALL_10_FACILITIES.find((f) => f.id === facilityId) || ALL_10_FACILITIES[0];
+          const facilityName = res.data.data?.facility?.facilityName || matchedMeta.name;
 
           // Directly save driver and hospital details into the particular facility portal
           try {
